@@ -370,7 +370,7 @@ export default function App() {
   });
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-[#f0f0f0] font-sans overflow-x-hidden selection:bg-[#ff4e00] selection:text-white flex flex-col justify-between">
+    <div className="min-h-screen bg-[#0f0f0f] text-[#f0f0f0] font-sans overflow-x-hidden selection:bg-[#ff4e00] selection:text-white flex flex-col">
       {/* Accent Shadow Blobs */}
       <div className="fixed top-1/2 right-[10%] -translate-y-1/2 w-[400px] h-[400px] bg-radial-gradient from-[#ff4e001a] to-transparent z-0 pointer-events-none" 
            style={{ background: 'radial-gradient(circle, rgba(255,78,0,0.1) 0%, transparent 70%)' }}></div>
@@ -380,24 +380,26 @@ export default function App() {
         </div>
       </div>
 
-      <header className="relative z-10 px-10 pt-10 pb-6 border-b border-[#f0f0f01a] flex justify-between items-start mx-10">
-        <div className="logo font-serif italic text-2xl tracking-tighter">EchoVox.pro</div>
-        <div className="flex gap-10 items-start">
-          <div className="text-[9px] text-white/20">v1.0.7</div>
-          <button 
-            onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
-            className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] transition-colors"
-          >
-            {t.langSwitch}
-          </button>
-          <div className="meta text-right text-[11px] uppercase tracking-[0.1em] opacity-60 leading-relaxed font-semibold">
-            {t.issue}<br />
-            {currentDate}
+      <header className="relative z-50 w-full px-6 md:px-10 pt-10 pb-6 border-b border-[#f0f0f01a] flex justify-between items-start bg-[#0f0f0f]">
+        <div className="max-w-7xl mx-auto w-full flex justify-between items-start">
+          <div className="logo font-serif italic text-2xl tracking-tighter text-white">EchoVox.pro</div>
+          <div className="flex gap-6 md:gap-10 items-start">
+            <div className="text-[10px] text-white/30 font-mono mt-1">v1.0.7</div>
+            <button 
+              onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
+              className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] hover:text-[#ff4e00] transition-all bg-black/20"
+            >
+              {t.langSwitch}
+            </button>
+            <div className="meta text-right text-[11px] uppercase tracking-[0.1em] opacity-60 leading-relaxed font-semibold hidden sm:block">
+              {t.issue}<br />
+              {currentDate}
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 flex-grow grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-20 p-10 mx-10">
+      <main className="relative z-10 w-full max-w-7xl mx-auto flex-grow grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-10 md:gap-20 p-6 md:p-10">
         {/* Synthesis Section */}
         <section className="space-y-10 max-w-[800px]">
           <div className="space-y-6">
@@ -632,7 +634,7 @@ export default function App() {
         </aside>
       </main>
 
-      <footer className="relative z-10 px-10 py-12 border-t border-[#f0f0f01a] mx-10 flex justify-between items-center">
+      <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-10 py-12 border-t border-[#f0f0f01a] flex justify-between items-center mt-10">
         <nav className="flex gap-10">
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold border-b border-[#ff4e00] pb-2">Synthesis</a>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Models</a>
