@@ -141,7 +141,9 @@ interface TtsHistory {
   audioData?: string; // Base64 data (only for current session items to save localStorage)
 }
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const ai = new GoogleGenAI({ 
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '' 
+});
 
 // WAV generation helper
 function generateWav(base64Data: string): Blob {
@@ -392,12 +394,12 @@ export default function App() {
            style={{ background: 'radial-gradient(circle, rgba(255,78,0,0.1) 0%, transparent 70%)' }}></div>
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-black text-[220px] uppercase tracking-[-10px] text-[#f0f0f00d] select-none whitespace-nowrap">
-          VOICE.AI
+          ECHOVOX
         </div>
       </div>
 
       <header className="relative z-10 px-10 pt-10 pb-6 border-b border-[#f0f0f01a] flex justify-between items-start mx-10">
-        <div className="logo font-serif italic text-2xl tracking-tighter">Echo.ai</div>
+        <div className="logo font-serif italic text-2xl tracking-tighter">EchoVox.pro</div>
         <div className="flex gap-10 items-start">
           <button 
             onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
