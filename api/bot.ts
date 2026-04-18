@@ -5,37 +5,76 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const GEMINI_KEY = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
-if (!BOT_TOKEN || !GEMINI_KEY) {
+// Support a comma-separated list of keys, falling back to singular standard keys
+const keysString = process.env.GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+const API_KEYS = keysString.split(',').map(k => k.trim()).filter(k => k.length > 0);
+
+if (!BOT_TOKEN || API_KEYS.length === 0) {
   // Graceful failure for Vercel build phase if keys aren't present
-  console.warn('⚠️ Missing BOT_TOKEN or GEMINI_KEY in API Route');
+  console.warn('⚠️ Missing BOT_TOKEN or GEMINI_API_KEY(S) in API Route');
 }
 
 const bot = new Telegraf(BOT_TOKEN || '');
-const ai = new GoogleGenAI({ apiKey: GEMINI_KEY || '' });
 
-// Basic Handlers (minimal for Vercel demo, we should ideally share logic)
+// Basic Handlers
 bot.start((ctx) => ctx.reply('EchoVox Pro Bot is Active! (Webhook Mode)'));
 
 bot.on('text', async (ctx) => {
   const text = ctx.message.text;
   if (text.startsWith('/')) return;
 
+  if (API_KEYS.length === 0) {
+    return ctx.reply('⚠️ Ошибка: На сервере не задан ни один API-ключ Gemini.');
+  }
+
   try {
     await ctx.sendChatAction('record_voice');
-    const response = await (ai as any).models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text }] }],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
-        },
-      },
-    });
+
+    // Shuffle array so requests are randomly distributed across all keys
+    const shuffledKeys = [...API_KEYS].sort(() => 0.5 - Math.random());
+    let response: any = null;
+    let lastError: any = null;
+    let success = false;
+
+    // Retry Loop: Try each key. If 429 Quota Exceeded happens, continue to next key.
+    for (let i = 0; i < shuffledKeys.length; i++) {
+        const currentKey = shuffledKeys[i];
+        try {
+            const ai = new GoogleGenAI({ apiKey: currentKey });
+            response = await (ai as any).models.generateContent({
+              model: "gemini-3.1-flash-tts-preview",
+              contents: [{ parts: [{ text }] }],
+              config: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: 'Kore' },
+                  },
+                },
+              },
+            });
+            success = true;
+            break; // Success! Break out of the retry loop.
+        } catch (apiErr: any) {
+             const status = apiErr?.status || apiErr?.response?.status;
+             const isQuotaError = status === 429 || apiErr?.message?.includes('429') || apiErr?.message?.includes('Quota exceeded');
+             if (isQuotaError) {
+                 console.warn(`Key ${i + 1}/${shuffledKeys.length} hit quota limit. Trying next...`);
+                 lastError = apiErr;
+                 continue; // Target hit quota limit, try next fallback key
+             } else {
+                 console.error(`Unexpected API error with key ${i + 1}:`, apiErr);
+                 lastError = apiErr;
+                 break; // Unrelated error (e.g., bad request, text too long), stop retrying.
+             }
+        }
+    }
+
+    if (!success) {
+      console.error('All keys exhausted or failed:', lastError);
+      return ctx.reply('⚠️ Ошибка: Все доступные API-ключи исчерпали свой лимит (квоту). Попробуйте завтра или добавьте новые ключи.');
+    }
 
     const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     const base64Audio = inlineData?.data;
