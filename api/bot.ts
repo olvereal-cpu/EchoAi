@@ -38,9 +38,12 @@ bot.on('text', async (ctx) => {
     });
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (base64Audio) {
+    if (base64Audio && base64Audio.length > 100) { // Check for valid data length
       const buffer = Buffer.from(base64Audio, 'base64');
       await ctx.replyWithVoice({ source: buffer });
+    } else {
+      console.error('TTS returned empty or invalid audio:', response);
+      ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
     }
   } catch (err) {
     console.error(err);
