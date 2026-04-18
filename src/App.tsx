@@ -4,7 +4,6 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Modality } from "@google/genai";
 import { 
   Mic2, 
   Play, 
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
+import { getAi } from './lib/gemini';
 
 // Constants
 const VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'] as const;
@@ -139,22 +139,6 @@ interface TtsHistory {
   voice: VoiceName;
   timestamp: number;
   audioData?: string; // Base64 data (only for current session items to save localStorage)
-}
-
-let aiClient: GoogleGenAI | null = null;
-
-function getAi(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    
-    if (!apiKey || apiKey === "VITE_GEMINI_API_KEY" || apiKey === "YOUR_GEMINI_KEY") {
-      console.warn("DEBUG: Gemini API Key is missing or invalid in environment variables.");
-      throw new Error('API Key is missing. Please set VITE_GEMINI_API_KEY in Vercel environment variables.');
-    }
-    
-    aiClient = new GoogleGenAI(apiKey);
-  }
-  return aiClient;
 }
 
 // WAV generation helper
@@ -320,42 +304,28 @@ export default function App() {
       const speakerLines = lines.filter(l => l.includes(':'));
       const isDialogue = speakerLines.length >= 2;
 
-      const config: any = {
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
+      const genAI = getAi();
+      if (!genAI) {
+        throw new Error("API Key is not configured correctly on the server. Please check Vercel environment variables.");
+      }
+      
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+      });
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO" as any],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: selectedVoice },
             },
           },
         },
-      };
+      } as any);
 
-      // If it looks like a dialogue, we use multi-speaker config
-      if (isDialogue) {
-        // Extract unique speaker names
-        const uniqueSpeakers = Array.from(new Set(speakerLines.map(l => l.split(':')[0].trim())));
-        // Use Kore for the first speaker and Puck for the second (Male/Female)
-        const speakerConfigs = uniqueSpeakers.map((name, index) => ({
-          speaker: name,
-          voiceConfig: {
-            prebuiltVoiceConfig: { 
-              voiceName: index % 2 === 0 ? 'Kore' : 'Puck' 
-            }
-          }
-        }));
-
-        config.config.speechConfig = {
-          multiSpeakerVoiceConfig: {
-            speakerVoiceConfigs: speakerConfigs
-          }
-        };
-      }
-
-      const response = await getAi().models.generateContent(config);
-
+      const response = await result.response;
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       
       if (base64Audio) {
@@ -413,6 +383,7 @@ export default function App() {
       <header className="relative z-10 px-10 pt-10 pb-6 border-b border-[#f0f0f01a] flex justify-between items-start mx-10">
         <div className="logo font-serif italic text-2xl tracking-tighter">EchoVox.pro</div>
         <div className="flex gap-10 items-start">
+          <div className="text-[9px] text-white/20">v1.0.5</div>
           <button 
             onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
             className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] transition-colors"
