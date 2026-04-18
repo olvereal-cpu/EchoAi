@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Georgia", serif;
+  --font-sans: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0f0f0f] text-[#f0f0f0];
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 2px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(240, 240, 240, 0.1);
+}

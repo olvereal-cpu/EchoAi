@@ -1,0 +1,6 @@
+{
+  "name": "Echo - Gemini TTS",
+  "description": "A high-quality text-to-speech application powered by Google Gemini 3.1 Flash TTS. Transform your text into natural-sounding voices with multiple speaker options.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
