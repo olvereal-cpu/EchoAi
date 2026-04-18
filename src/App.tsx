@@ -145,11 +145,14 @@ let aiClient: GoogleGenAI | null = null;
 
 function getAi(): GoogleGenAI {
   if (!aiClient) {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '');
-    if (!apiKey) {
-      throw new Error('API Key is missing. Please set VITE_GEMINI_API_KEY in your environment variables.');
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    
+    if (!apiKey || apiKey === "VITE_GEMINI_API_KEY" || apiKey === "YOUR_GEMINI_KEY") {
+      console.warn("DEBUG: Gemini API Key is missing or invalid in environment variables.");
+      throw new Error('API Key is missing. Please set VITE_GEMINI_API_KEY in Vercel environment variables.');
     }
-    aiClient = new GoogleGenAI({ apiKey });
+    
+    aiClient = new GoogleGenAI(apiKey);
   }
   return aiClient;
 }
