@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-console.log("%c ECHOVOX STARTING v1.0.8 ", "background: #ff4e00; color: white; font-weight: bold; padding: 4px;");
+console.log("%c ECHOVOX STARTING v1.0.9 ", "background: #ff4e00; color: white; font-weight: bold; padding: 4px;");
 
 try {
   const rootElement = document.getElementById('root');

@@ -304,28 +304,24 @@ export default function App() {
       const speakerLines = lines.filter(l => l.includes(':'));
       const isDialogue = speakerLines.length >= 2;
 
-      const genAI = await getAi();
-      if (!genAI) {
+      const ai = await getAi();
+      if (!ai) {
         throw new Error("API Key is missing. In Vercel, please add 'VITE_GEMINI_API_KEY' to your Environment Variables and redeploy.");
       }
       
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-      });
-
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO" as any],
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          responseModalities: ["AUDIO"],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: selectedVoice },
             },
           },
         },
-      } as any);
+      });
 
-      const response = await result.response;
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       
       if (base64Audio) {
@@ -384,7 +380,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto w-full flex justify-between items-start">
           <div className="logo font-serif italic text-2xl tracking-tighter text-white">EchoVox.pro</div>
           <div className="flex gap-6 md:gap-10 items-start">
-            <div className="text-[10px] text-white/30 font-mono mt-1">v1.0.8</div>
+            <div className="text-[10px] text-white/30 font-mono mt-1">v1.0.9</div>
             <button 
               onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
               className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] hover:text-[#ff4e00] transition-all bg-black/20"
