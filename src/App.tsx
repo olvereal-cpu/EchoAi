@@ -141,9 +141,18 @@ interface TtsHistory {
   audioData?: string; // Base64 data (only for current session items to save localStorage)
 }
 
-const ai = new GoogleGenAI({ 
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '' 
-});
+let aiClient: GoogleGenAI | null = null;
+
+function getAi(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '');
+    if (!apiKey) {
+      throw new Error('API Key is missing. Please set VITE_GEMINI_API_KEY in your environment variables.');
+    }
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 // WAV generation helper
 function generateWav(base64Data: string): Blob {
@@ -342,7 +351,7 @@ export default function App() {
         };
       }
 
-      const response = await ai.models.generateContent(config);
+      const response = await getAi().models.generateContent(config);
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       

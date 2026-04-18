@@ -134,6 +134,7 @@ bot.hears('⭐️ Поддержать проект', (ctx) => {
     title: 'Поддержка EchoVox.pro',
     description: 'Добровольный взнос на развитие и оплату серверов.',
     payload: 'donation',
+    provider_token: '', // Empty for Telegram Stars
     currency: 'XTR', // Stars
     prices: [{ label: '10 Stars', amount: 10 }],
     start_parameter: 'donate'
@@ -176,7 +177,11 @@ bot.action('admin_broadcast', (ctx) => {
 bot.on('text', checkSub, async (ctx) => {
   const text = ctx.message.text;
   const users = loadUsers();
-  const user = users[ctx.from!.id] || { voice: 'Kore' };
+  const user = users[ctx.from!.id] || { 
+    id: ctx.from!.id, 
+    voice: 'Kore',
+    joinedAt: new Date().toISOString()
+  } as UserData;
 
   if (text.startsWith('/')) return; // Ignore other commands
 
