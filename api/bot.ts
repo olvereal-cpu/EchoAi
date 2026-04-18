@@ -38,10 +38,38 @@ bot.on('text', async (ctx) => {
     });
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (base64Audio && base64Audio.length > 100) { // Check for valid data length
-      const buffer = Buffer.from(base64Audio, 'base64');
-      // Send as document to avoid OGG playback issues/strict format checks
-      await ctx.replyWithDocument({ source: buffer, filename: 'audio.mp3' }, { caption: 'Готовая озвучка' });
+    if (base64Audio && base64Audio.length > 100) { 
+      // Add WAV header to raw PCM data
+      const binaryString = Buffer.from(base64Audio, 'base64').toString('binary');
+      const len = binaryString.length;
+      const buffer = Buffer.alloc(len);
+      for (let i = 0; i < len; i++) buffer[i] = binaryString.charCodeAt(i);
+      
+      const numChannels = 1;
+      const sampleRate = 24000;
+      const bitsPerSample = 16;
+      const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+      const blockAlign = (numChannels * bitsPerSample) / 8;
+      const dataSize = buffer.length;
+      const chunkSize = 36 + dataSize;
+      
+      const wavHeader = Buffer.alloc(44);
+      wavHeader.write('RIFF', 0);
+      wavHeader.writeUInt32LE(chunkSize, 4);
+      wavHeader.write('WAVE', 8);
+      wavHeader.write('fmt ', 12);
+      wavHeader.writeUInt32LE(16, 16);
+      wavHeader.writeUInt16LE(1, 20); // PCM
+      wavHeader.writeUInt16LE(numChannels, 22);
+      wavHeader.writeUInt32LE(sampleRate, 24);
+      wavHeader.writeUInt32LE(byteRate, 28);
+      wavHeader.writeUInt16LE(blockAlign, 32);
+      wavHeader.writeUInt16LE(bitsPerSample, 34);
+      wavHeader.write('data', 36);
+      wavHeader.writeUInt32LE(dataSize, 40);
+      
+      const finalWav = Buffer.concat([wavHeader, buffer]);
+      await ctx.replyWithDocument({ source: finalWav, filename: 'audio.wav' }, { caption: 'Готовая озвучка (WAV)' });
     } else {
       console.error('TTS returned empty or invalid audio:', response);
       ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
