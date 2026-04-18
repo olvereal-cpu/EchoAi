@@ -1,6 +1,6 @@
 {
   "name": "EchoVox.pro",
-  "description": "High-precision text-to-speech synthesis and voice architecture powered by Google Gemini 3.1.",
+  "description": "High-precision text-to-speech synthesis and voice architecture powered by EchoVox.pro",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
