@@ -304,7 +304,7 @@ export default function App() {
       const speakerLines = lines.filter(l => l.includes(':'));
       const isDialogue = speakerLines.length >= 2;
 
-      const genAI = getAi();
+      const genAI = await getAi();
       if (!genAI) {
         throw new Error("API Key is not configured correctly on the server. Please check Vercel environment variables.");
       }
@@ -383,7 +383,7 @@ export default function App() {
       <header className="relative z-10 px-10 pt-10 pb-6 border-b border-[#f0f0f01a] flex justify-between items-start mx-10">
         <div className="logo font-serif italic text-2xl tracking-tighter">EchoVox.pro</div>
         <div className="flex gap-10 items-start">
-          <div className="text-[9px] text-white/20">v1.0.5</div>
+          <div className="text-[9px] text-white/20">v1.0.6</div>
           <button 
             onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
             className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] transition-colors"

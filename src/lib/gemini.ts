@@ -1,8 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
-
 let aiClient: any = null;
 
-export function getAi() {
+export async function getAi() {
   if (!aiClient) {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     
@@ -12,6 +10,7 @@ export function getAi() {
     }
     
     try {
+      const { GoogleGenAI } = await import("@google/genai");
       aiClient = new GoogleGenAI(apiKey);
     } catch (e) {
       console.error("Critical error: Failed to construct GoogleGenAI client", e);
