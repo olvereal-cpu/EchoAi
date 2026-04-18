@@ -199,27 +199,93 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
         prompt = `${styles[user.scenario]}: ${text}`;
       }
 
-      const response = await (ai as any).models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: user.voice || 'Kore' },
-            },
-          },
-        },
-      });
+      const keysString = process.env.GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+      const API_KEYS = keysString.split(',').map(k => k.trim()).filter(k => k.length > 0);
+
+      if (API_KEYS.length === 0) {
+        return await ctx.reply('⚠️ Ошибка: На сервере не задан ни один API-ключ Gemini.');
+      }
+
+      const shuffledKeys = [...API_KEYS].sort(() => 0.5 - Math.random());
+      let response: any = null;
+      let lastError: any = null;
+      let success = false;
+
+      for (let i = 0; i < shuffledKeys.length; i++) {
+          const currentKey = shuffledKeys[i];
+          try {
+              const currentAi = new GoogleGenAI({ apiKey: currentKey });
+              response = await (currentAi as any).models.generateContent({
+                model: "gemini-3.1-flash-tts-preview",
+                contents: [{ parts: [{ text: prompt }] }],
+                config: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: user.voice || 'Kore' },
+                    },
+                  },
+                },
+              });
+              success = true;
+              break;
+          } catch (apiErr: any) {
+               const status = apiErr?.status || apiErr?.response?.status;
+               const isQuotaError = status === 429 || apiErr?.message?.includes('429') || apiErr?.message?.includes('Quota exceeded');
+               if (isQuotaError) {
+                   console.warn(`Key ${i + 1}/${shuffledKeys.length} hit quota limit. Trying next...`);
+                   lastError = apiErr;
+                   continue;
+               } else {
+                   console.error(`Unexpected API error with key ${i + 1}:`, apiErr);
+                   lastError = apiErr;
+                   break;
+               }
+          }
+      }
+
+      if (!success) {
+        console.error('All keys exhausted or failed:', lastError);
+        return await ctx.reply('⚠️ Ошибка: Все доступные API-ключи исчерпали свой лимит (квоту).');
+      }
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        const buffer = Buffer.from(base64Audio, 'base64');
-        await ctx.replyWithVoice({ source: buffer }, { caption: 'Синтезировано через EchoVox.pro' });
+      if (base64Audio && base64Audio.length > 100) {
+        // Fast conversion of base64 to Buffer
+        const pcmBuffer = Buffer.from(base64Audio, 'base64');
+        
+        const numChannels = 1;
+        const sampleRate = 24000;
+        const bitsPerSample = 16;
+        const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+        const blockAlign = (numChannels * bitsPerSample) / 8;
+        const dataSize = pcmBuffer.length;
+        const chunkSize = 36 + dataSize;
+        
+        const wavHeader = Buffer.alloc(44);
+        wavHeader.write('RIFF', 0);
+        wavHeader.writeUInt32LE(chunkSize, 4);
+        wavHeader.write('WAVE', 8);
+        wavHeader.write('fmt ', 12);
+        wavHeader.writeUInt32LE(16, 16);
+        wavHeader.writeUInt16LE(1, 20); // PCM format chunk
+        wavHeader.writeUInt16LE(numChannels, 22);
+        wavHeader.writeUInt32LE(sampleRate, 24);
+        wavHeader.writeUInt32LE(byteRate, 28);
+        wavHeader.writeUInt16LE(blockAlign, 32);
+        wavHeader.writeUInt16LE(bitsPerSample, 34);
+        wavHeader.write('data', 36);
+        wavHeader.writeUInt32LE(dataSize, 40);
+        
+        const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
+        
+        await ctx.replyWithDocument({ source: finalWav, filename: 'voice.wav' }, { caption: '🔊 Готовая озвучка' });
+      } else {
+         return await ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
       }
     } catch (err) {
       console.error(err);
-      ctx.reply('⚠️ Ошибка синтеза.');
+      await ctx.reply('⚠️ Ошибка синтеза.');
     }
   });
 
