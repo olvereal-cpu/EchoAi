@@ -80,18 +80,15 @@ bot.on('text', async (ctx) => {
     const base64Audio = inlineData?.data;
 
     if (base64Audio && base64Audio.length > 100) { 
-      // Add standard WAV header to raw PCM data
-      const binaryString = Buffer.from(base64Audio, 'base64').toString('binary');
-      const len = binaryString.length;
-      const buffer = Buffer.alloc(len);
-      for (let i = 0; i < len; i++) buffer[i] = binaryString.charCodeAt(i);
+      // Fast conversion of base64 to Buffer
+      const pcmBuffer = Buffer.from(base64Audio, 'base64');
       
       const numChannels = 1;
       const sampleRate = 24000;
       const bitsPerSample = 16;
       const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
       const blockAlign = (numChannels * bitsPerSample) / 8;
-      const dataSize = buffer.length;
+      const dataSize = pcmBuffer.length;
       const chunkSize = 36 + dataSize;
       
       const wavHeader = Buffer.alloc(44);
@@ -100,7 +97,7 @@ bot.on('text', async (ctx) => {
       wavHeader.write('WAVE', 8);
       wavHeader.write('fmt ', 12);
       wavHeader.writeUInt32LE(16, 16);
-      wavHeader.writeUInt16LE(1, 20); // PCM format format chunk
+      wavHeader.writeUInt16LE(1, 20); // PCM format chunk
       wavHeader.writeUInt16LE(numChannels, 22);
       wavHeader.writeUInt32LE(sampleRate, 24);
       wavHeader.writeUInt32LE(byteRate, 28);
@@ -109,10 +106,10 @@ bot.on('text', async (ctx) => {
       wavHeader.write('data', 36);
       wavHeader.writeUInt32LE(dataSize, 40);
       
-      const finalWav = Buffer.concat([wavHeader, buffer]);
+      const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
       
-      // replyWithAudio forces Telegram to render an audio player UI instead of a generic file
-      await ctx.replyWithAudio({ source: finalWav, filename: 'voice.wav' }, { caption: '🔊 Готово', title: 'Озвучка' });
+      // Send as document since replyWithAudio strict fails on WAV, and replyWithVoice fails on PCM
+      await ctx.replyWithDocument({ source: finalWav, filename: 'voice.wav' }, { caption: '🔊 Готовая озвучка' });
     } else {
       console.error('TTS returned empty or invalid audio:', response);
       ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
