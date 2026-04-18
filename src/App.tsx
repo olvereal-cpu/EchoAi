@@ -306,7 +306,7 @@ export default function App() {
 
       const genAI = await getAi();
       if (!genAI) {
-        throw new Error("API Key is not configured correctly on the server. Please check Vercel environment variables.");
+        throw new Error("API Key is missing. In Vercel, please add 'VITE_GEMINI_API_KEY' to your Environment Variables and redeploy.");
       }
       
       const model = genAI.getGenerativeModel({
