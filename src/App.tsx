@@ -384,7 +384,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto w-full flex justify-between items-start">
           <div className="logo font-serif italic text-2xl tracking-tighter text-white">EchoVox.pro</div>
           <div className="flex gap-6 md:gap-10 items-start">
-            <div className="text-[10px] text-white/30 font-mono mt-1">v1.0.7</div>
+            <div className="text-[10px] text-white/30 font-mono mt-1">v1.0.8</div>
             <button 
               onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
               className="text-[10px] uppercase tracking-[0.2em] font-bold border border-[#f0f0f033] px-3 py-1 hover:border-[#ff4e00] hover:text-[#ff4e00] transition-all bg-black/20"
