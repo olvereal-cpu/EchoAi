@@ -39,12 +39,41 @@ bot.on('text', async (ctx) => {
 
     const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     const base64Audio = inlineData?.data;
-    const mimeType = inlineData?.mimeType;
-    console.log('Gemini Audio MIME type:', mimeType);
 
     if (base64Audio && base64Audio.length > 100) { 
-      // Send as document - Gemini TTS standard output is OGG Opus
-      await ctx.replyWithDocument({ source: Buffer.from(base64Audio, 'base64'), filename: 'audio.ogg' }, { caption: 'Готовая озвучка' });
+      // Add standard WAV header to raw PCM data
+      const binaryString = Buffer.from(base64Audio, 'base64').toString('binary');
+      const len = binaryString.length;
+      const buffer = Buffer.alloc(len);
+      for (let i = 0; i < len; i++) buffer[i] = binaryString.charCodeAt(i);
+      
+      const numChannels = 1;
+      const sampleRate = 24000;
+      const bitsPerSample = 16;
+      const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+      const blockAlign = (numChannels * bitsPerSample) / 8;
+      const dataSize = buffer.length;
+      const chunkSize = 36 + dataSize;
+      
+      const wavHeader = Buffer.alloc(44);
+      wavHeader.write('RIFF', 0);
+      wavHeader.writeUInt32LE(chunkSize, 4);
+      wavHeader.write('WAVE', 8);
+      wavHeader.write('fmt ', 12);
+      wavHeader.writeUInt32LE(16, 16);
+      wavHeader.writeUInt16LE(1, 20); // PCM format format chunk
+      wavHeader.writeUInt16LE(numChannels, 22);
+      wavHeader.writeUInt32LE(sampleRate, 24);
+      wavHeader.writeUInt32LE(byteRate, 28);
+      wavHeader.writeUInt16LE(blockAlign, 32);
+      wavHeader.writeUInt16LE(bitsPerSample, 34);
+      wavHeader.write('data', 36);
+      wavHeader.writeUInt32LE(dataSize, 40);
+      
+      const finalWav = Buffer.concat([wavHeader, buffer]);
+      
+      // replyWithAudio forces Telegram to render an audio player UI instead of a generic file
+      await ctx.replyWithAudio({ source: finalWav, filename: 'voice.wav' }, { caption: '🔊 Готово', title: 'Озвучка' });
     } else {
       console.error('TTS returned empty or invalid audio:', response);
       ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
