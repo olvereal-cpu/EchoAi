@@ -40,7 +40,8 @@ bot.on('text', async (ctx) => {
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (base64Audio && base64Audio.length > 100) { // Check for valid data length
       const buffer = Buffer.from(base64Audio, 'base64');
-      await ctx.replyWithVoice({ source: buffer });
+      // Send as document to avoid OGG playback issues/strict format checks
+      await ctx.replyWithDocument({ source: buffer, filename: 'audio.ogg' }, { caption: 'Готовая озвучка' });
     } else {
       console.error('TTS returned empty or invalid audio:', response);
       ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
