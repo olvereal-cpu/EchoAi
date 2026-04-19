@@ -382,6 +382,149 @@ export default function App() {
     }
   };
 
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminStats, setAdminStats] = useState<any>(null);
+  const [webhookInfo, setWebhookInfo] = useState<any>(null);
+  const [isAdminLoading, setIsAdminLoading] = useState(false);
+
+  const fetchAdminData = async () => {
+    setIsAdminLoading(true);
+    try {
+      const stats = await fetch('/api/admin/stats').then(res => res.json());
+      const webhook = await fetch('/api/admin/webhook').then(res => res.json());
+      setAdminStats(stats);
+      setWebhookInfo(webhook);
+    } catch (err) {
+      console.error("Failed to fetch admin data", err);
+    } finally {
+      setIsAdminLoading(false);
+    }
+  };
+
+  const deleteWebhook = async () => {
+    if (!confirm("Are you sure you want to delete the webhook? This will stop Vercel and enable local polling.")) return;
+    try {
+      await fetch('/api/admin/webhook/delete', { method: 'POST' });
+      alert("Webhook deleted. Refreshing...");
+      fetchAdminData();
+    } catch (e) {
+      alert("Failed to delete webhook");
+    }
+  };
+
+  useEffect(() => {
+    if (isAdminView) {
+      fetchAdminData();
+    }
+  }, [isAdminView]);
+
+  if (isAdminView) {
+    return (
+      <div className="min-h-screen bg-[#050505] text-[#f0f0f0] font-mono p-6 md:p-10 flex flex-col gap-10">
+        <header className="flex justify-between items-center border-b border-white/10 pb-6">
+          <div className="flex gap-4 items-center">
+            <Cpu className="text-[#ff4e00]" />
+            <h1 className="text-xl font-black uppercase tracking-tighter italic">EchoVox Master Terminal</h1>
+          </div>
+          <button 
+            onClick={() => setIsAdminView(false)}
+            className="px-4 py-2 border border-white/20 text-[10px] uppercase font-bold hover:bg-white hover:text-black transition-all"
+          >
+            Exit Terminal
+          </button>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-6 bg-white/5 border border-white/10 space-y-2">
+            <span className="text-[10px] opacity-40 uppercase font-bold">Linguistic Entities</span>
+            <div className="text-4xl font-black text-[#ff4e00]">{adminStats?.userCount || 0}</div>
+          </div>
+          <div className="p-6 bg-white/5 border border-white/10 space-y-2">
+            <span className="text-[10px] opacity-40 uppercase font-bold">Glyphs Synthesized</span>
+            <div className="text-4xl font-black">{adminStats?.totalChars?.toLocaleString() || 0}</div>
+          </div>
+          <div className="p-6 bg-white/5 border border-white/10 space-y-2">
+            <span className="text-[10px] opacity-40 uppercase font-bold">Soundwaves Generated</span>
+            <div className="text-4xl font-black">{adminStats?.totalAudio || 0}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <div className="space-y-6">
+            <h2 className="text-sm uppercase font-bold tracking-widest text-white/50 border-b border-white/5 pb-2">Webhook Relay Configuration</h2>
+            <div className="p-6 bg-white/5 border border-white/10 space-y-4">
+               <div>
+                 <span className="text-[10px] opacity-40 uppercase block mb-1">Target URL</span>
+                 <code className="text-xs text-[#ff4e00] break-all">{webhookInfo?.url || 'NULL (POLLING MODE ACTIVE)'}</code>
+               </div>
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <span className="text-[10px] opacity-40 uppercase block mb-1">Pending Syncs</span>
+                   <div className="text-xl font-bold">{webhookInfo?.pending_update_count || 0}</div>
+                 </div>
+                 <div>
+                   <span className="text-[10px] opacity-40 uppercase block mb-1">Last Error Date</span>
+                   <div className="text-xs opacity-60">
+                     {webhookInfo?.last_error_date ? new Date(webhookInfo.last_error_date * 1000).toLocaleString() : 'CLEAR'}
+                   </div>
+                 </div>
+               </div>
+               
+               <div className="pt-4 flex gap-4">
+                 <button 
+                  onClick={fetchAdminData}
+                  className="px-4 py-2 bg-white/5 border border-white/10 text-[10px] font-bold uppercase hover:bg-white/10"
+                 >
+                   Refresh Sync
+                 </button>
+                 <button 
+                  onClick={deleteWebhook}
+                  className="px-4 py-2 border border-red-500/50 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white"
+                 >
+                   Clear Webhook Relay
+                 </button>
+               </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <h2 className="text-sm uppercase font-bold tracking-widest text-white/50 border-b border-white/5 pb-2">Recent Linguistic Activity</h2>
+            <div className="border border-white/10 overflow-hidden">
+               <table className="w-full text-[10px] uppercase text-left border-collapse">
+                 <thead className="bg-white/5">
+                   <tr>
+                     <th className="p-3 border-b border-white/10">ID</th>
+                     <th className="p-3 border-b border-white/10">Profile</th>
+                     <th className="p-3 border-b border-white/10">Soundwaves</th>
+                     <th className="p-3 border-b border-white/10">Glyphs</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {adminStats?.users?.slice(0, 5).map((user: any) => (
+                     <tr key={user.id} className="hover:bg-white/5">
+                       <td className="p-3 border-b border-white/5 opacity-50">{user.id}</td>
+                       <td className="p-3 border-b border-white/5 font-bold">@{user.username || 'ANON'}</td>
+                       <td className="p-3 border-b border-white/5">{user.audioCount || 0}</td>
+                       <td className="p-3 border-b border-white/5">{user.charsGenerated || 0}</td>
+                     </tr>
+                   ))}
+                   {!adminStats?.users?.length && (
+                     <tr><td colSpan={4} className="p-10 text-center opacity-20">NO ENTITIES REGISTERED</td></tr>
+                   )}
+                 </tbody>
+               </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto pt-10 text-[9px] opacity-20 flex justify-between">
+           <span>ECHVOX_MASTER_TERMINAL_V1.0</span>
+           <span>SECURE_DATA_RELAY_ACTIVE</span>
+        </div>
+      </div>
+    );
+  }
+
   const currentDate = new Date().toLocaleDateString('ru-RU', {
     weekday: 'long',
     day: 'numeric',
@@ -675,6 +818,13 @@ export default function App() {
         </div>
 
         <nav className="flex gap-6 md:gap-10 items-center">
+          <button 
+            onClick={() => setIsAdminView(true)}
+            className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity flex items-center gap-2"
+          >
+            <Settings2 size={12} />
+            Admin Terminal
+          </button>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold border-b border-[#ff4e00] pb-2">Synthesis</a>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Models</a>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Docs</a>
