@@ -630,15 +630,32 @@ export default function App() {
         </aside>
       </main>
 
-      <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-10 py-12 border-t border-[#f0f0f01a] flex justify-between items-center mt-10">
-        <nav className="flex gap-10">
+      <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-10 py-12 border-t border-[#f0f0f01a] flex flex-col md:flex-row justify-between items-center gap-10 mt-10">
+        <div className="flex flex-col items-center md:items-start gap-4">
+          <div className="flex items-center gap-4">
+            <svg viewBox="0 0 100 100" className="w-12 h-12" fill="none" stroke="url(#logo-grad)" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round">
+              <defs>
+                <linearGradient id="logo-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#C82B7D" />
+                  <stop offset="100%" stopColor="#EB5E28" />
+                </linearGradient>
+              </defs>
+              <path d="M 16 38 A 36 36 0 0 1 84 38" />
+              <path d="M 16 62 A 36 36 0 0 0 84 62" />
+              <path d="M 5 50 L 25 50 L 32 30 L 42 75 L 52 20 L 62 70 L 72 50 L 95 50" />
+            </svg>
+            <div className="flex flex-col text-left">
+              <span className="font-serif italic text-2xl font-bold text-white tracking-tight">EchoVox</span>
+              <span className="text-[10px] uppercase tracking-widest text-[#f0f0f066] mt-1">© 2026 Echovox.<br/>All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex gap-6 md:gap-10 items-center">
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold border-b border-[#ff4e00] pb-2">Synthesis</a>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Models</a>
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Docs</a>
         </nav>
-        <div className="text-[10px] uppercase tracking-[0.2em] opacity-20 italic">
-          {t.rendering}
-        </div>
       </footer>
     </div>
   );

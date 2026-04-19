@@ -39,12 +39,12 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
 
   // --- DB Helpers ---
   function loadUsers(): Record<number, UserData> {
-    if (fs.existsSync(USERS_FILE)) {
-      try {
+    try {
+      if (fs.existsSync(USERS_FILE)) {
         return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
-      } catch (e) {
-        return {};
       }
+    } catch (e) {
+      console.warn('Error reading users file:', e);
     }
     return {};
   }
@@ -52,7 +52,11 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
   function saveUser(user: Partial<UserData> & { id: number }) {
     const users = loadUsers();
     users[user.id] = { ...users[user.id], ...user } as UserData;
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    try {
+      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    } catch (e) {
+      console.warn('Could not save user, likely Read-Only filesystem on Vercel:', e.message);
+    }
   }
 
   // --- Keyboards ---
@@ -106,7 +110,7 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
       joinedAt: new Date().toISOString()
     };
     saveUser(user);
-    await ctx.reply('🚀 Добро пожаловать в EchoVox.pro! Я превращаю текст в профессиональную озвучку.', getMainMenu());
+    await ctx.reply('🚀 Добро пожаловать в EchoVox.pro! Я превращаю текст в профессиональную озвучку. Просто напишите мне текст, и я пришлю вам готовый аудиофайл.', getMainMenu());
   });
 
   bot.command('admin', (ctx) => {
@@ -120,6 +124,7 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
 
   bot.hears('🎙️ Выбрать голос', (ctx) => ctx.reply('Выберите желаемый голос:', getVoiceMenu()));
   bot.hears('📝 Сценарии', (ctx) => ctx.reply('Выберите стиль озвучки:', getScenarioMenu()));
+  bot.hears('ℹ️ Помощь', (ctx) => ctx.reply('ℹ️ **Справка:**\nОтправьте любой текст боту, и он преобразует его в речь (до 1000 слов). Вы можете выбрать разные голоса или применить стиль озвучки в меню "Сценарии".\n\nМодель: Gemini Flash Voice TTS\nРазработчик: AI Studio Build'));
 
   bot.action(/voice_(.+)/, (ctx) => {
     const voice = ctx.match[1];
@@ -132,19 +137,12 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
     const scen = ctx.match[1];
     saveUser({ id: ctx.from!.id, scenario: scen === 'none' ? undefined : scen });
     ctx.answerCbQuery();
-    ctx.reply(`✅ Выбран сценарий: ${scen}`);
+    ctx.reply(`✅ Выбран сценарий: ${scen === 'none' ? 'Сброшен' : scen}`);
   });
 
   bot.hears('⭐️ Поддержать проект', (ctx) => {
-    ctx.replyWithInvoice({
-      title: 'Поддержка EchoVox.pro',
-      description: 'Добровольный взнос на развитие и оплату серверов.',
-      payload: 'donation',
-      provider_token: '', 
-      currency: 'XTR', 
-      prices: [{ label: '10 Stars', amount: 10 }],
-      start_parameter: 'donate'
-    });
+    // Reply with a message instead of broken invoice if provider_token is missing
+    ctx.reply('⭐️ **Спасибо за поддержку!**\nПроект существует благодаря энтузиазму разработчиков. Вы можете поддержать нас, поделившись этим ботом с друзьями!');
   });
 
   bot.action('admin_stats', (ctx) => {
@@ -289,9 +287,11 @@ function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
     }
   });
 
-  // Start polling if not in serverless context
-  if (process.env.NODE_ENV !== 'production' || process.env.RUN_BOT === 'true') {
+  // Start polling only if strictly forced (disabled by default to prevent stealing Webhook from Vercel)
+  if (process.env.LOCAL_DEBUG_POLLING === 'true') {
      bot.launch().then(() => console.log('✅ Polling Bot started.'));
+  } else {
+     console.log('ℹ️ Local polling disabled. Bot expects to run via Vercel Webhook in production.');
   }
 }
 
