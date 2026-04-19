@@ -50,8 +50,10 @@ function setupBotLogic(bot: Telegraf) {
     const users = loadUsers();
     users[user.id] = { ...users[user.id], ...user } as UserData;
     try {
-      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    } catch (e) {
+      if (fs && fs.writeFileSync) {
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+      }
+    } catch (e: any) {
       console.warn('Could not save user, likely Read-Only filesystem on Vercel:', e.message);
     }
   }
