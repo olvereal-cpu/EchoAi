@@ -703,7 +703,15 @@ function setupBotLogic(bot: Telegraf) {
   if (!isVercel && !isWebhook) {
      console.log('🚀 Launching polling bot...');
      bot.launch()
-       .catch((err) => console.error('❌ Failed to launch bot:', err));
+       .then(() => console.log('✅ Polling Bot successfully started.'))
+       .catch((err: any) => {
+         if (err.description?.includes('Conflict')) {
+           console.error('❌ Conflict: Webhook is active elsewhere (likely on Vercel).');
+           console.log('💡 To use the bot here in the preview, write /admin to the bot (it will go to Vercel) and press "Delete Webhook", then wait a minute.');
+         } else {
+           console.error('❌ Failed to launch bot:', err);
+         }
+       });
   }
 }
 
