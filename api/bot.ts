@@ -1,7 +1,14 @@
-import { bot } from './telegram_bot';
-
 export default async (req: any, res: any) => {
   try {
+    let bot: any = null;
+    try {
+       const tgBot = await import('./telegram_bot.js') || await import('./telegram_bot');
+       bot = tgBot.bot;
+    } catch (importErr: any) {
+       console.error("CRITICAL: Failed to import telegram_bot:", importErr);
+       return res.status(200).send('Import failed but ignored to prevent Telegram loops');
+    }
+
     if (req.method === 'POST') {
       if (!req.body) {
          console.error('Empty body received');
