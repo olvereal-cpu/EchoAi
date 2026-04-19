@@ -430,24 +430,38 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.action('admin_export', async (ctx) => {
     try {
+      console.log('📬 Admin export requested by:', ctx.from?.id);
       if (!db) {
+         console.error('❌ export: db is not initialized');
          return ctx.reply("База данных недоступна");
       }
       await ctx.answerCbQuery('Генерирую файл...');
-      const snap = await getDocs(collection(db, 'bot_users'));
-      let content = "";
+      
+      const colRef = collection(db, 'bot_users');
+      const snap = await getDocs(colRef);
+      console.log(`📑 Found ${snap.docs.length} users in DB for export.`);
+      
+      let content = "ID | Username | Name | Audio Count | Chars | Joined At\n";
+      content += "----------------------------------------------------------\n";
+      
       snap.forEach(doc => {
          const u = doc.data() as UserData;
-         content += `${u.id} | @${u.username || 'n/a'} | ${u.name}\n`;
+         content += `${doc.id} | @${u.username || 'n/a'} | ${u.name || 'n/a'} | ${u.audioCount || 0} | ${u.charsGenerated || 0} | ${u.joinedAt || 'n/a'}\n`;
       });
       
-      if (!content) {
-          return ctx.reply("База пользователей пуста.");
+      if (snap.docs.length === 0) {
+          return ctx.reply("База пользователей в Firestore пуста.");
       }
 
-      await ctx.replyWithDocument({ source: Buffer.from(content), filename: 'users.txt' });
+      await ctx.replyWithDocument({ 
+        source: Buffer.from(content, 'utf-8'), 
+        filename: `users_export_${new Date().toISOString().split('T')[0]}.txt` 
+      }, {
+        caption: `👥 Всего пользователей в базе: ${snap.docs.length}`
+      });
+      console.log('✅ Export sent successfully.');
     } catch (e: any) {
-      console.error("Export error", e);
+      console.error("❌ Export error:", e);
       ctx.reply(`❌ Ошибка экспорта: ${e.message}`);
     }
   });
