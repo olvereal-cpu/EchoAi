@@ -1,4 +1,4 @@
-import { bot } from '../telegram_bot';
+import { bot } from './telegram_bot';
 
 export default async (req: any, res: any) => {
   try {

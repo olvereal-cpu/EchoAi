@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "start:bot": "tsx telegram_bot.ts"
+    "start:bot": "tsx api/telegram_bot.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
