@@ -37,6 +37,51 @@ function setupBotLogic(bot: Telegraf) {
     charsGenerated?: number;
     audioCount?: number;
     joinedAt: string;
+    
+    // Quota System
+    lastResetDate?: string;
+    dailyGens?: number;
+    purchasedGens?: number;
+  }
+
+  // Quota Helper
+  function getDailyLimit() {
+    return 10;
+  }
+
+  function checkUserQuota(user: Partial<UserData>): boolean {
+    const today = new Date().toISOString().split('T')[0];
+    let dailyGens = user.dailyGens || 0;
+    
+    if (user.lastResetDate !== today) {
+      dailyGens = 0; // Reset
+    }
+    
+    const purchased = user.purchasedGens || 0;
+    return dailyGens < getDailyLimit() || purchased > 0;
+  }
+
+  function consumeUserQuota(user: Partial<UserData>, id: number) {
+    const today = new Date().toISOString().split('T')[0];
+    let dailyGens = user.dailyGens || 0;
+    let purchased = user.purchasedGens || 0;
+    
+    if (user.lastResetDate !== today) {
+      dailyGens = 0;
+    }
+    
+    if (dailyGens < getDailyLimit()) {
+      dailyGens++;
+    } else if (purchased > 0) {
+      purchased--;
+    }
+    
+    saveUser({
+       id,
+       lastResetDate: today,
+       dailyGens,
+       purchasedGens: purchased
+    });
   }
 
   // --- DB Helpers ---
@@ -96,7 +141,7 @@ function setupBotLogic(bot: Telegraf) {
   const getMainMenu = () => {
     return Markup.keyboard([
       ['🎙️ Выбрать голос', '🎭 Эмоции / Роли'],
-      ['🌍 Переводчик', '⭐️ Поддержать проект'],
+      ['🌍 Переводчик', '⭐️ Купить генерации'],
       ['ℹ️ Помощь']
     ]).resize();
   };
@@ -249,20 +294,51 @@ function setupBotLogic(bot: Telegraf) {
   });
 
   bot.hears('⭐️ Поддержать проект', (ctx) => {
-    return ctx.replyWithInvoice({
-      title: 'Поддержка проекта',
-      description: 'Отправить 50 Telegram ⭐️ разработчику бота.',
-      payload: 'donate_50_stars',
-      provider_token: '',
-      currency: 'XTR',
-      prices: [{ label: 'Поддержка', amount: 50 }]
+    return ctx.reply('Вы исчерпали бесплатный лимит или просто хотите купить больше генераций? Выберите пакет:', Markup.inlineKeyboard([
+        [Markup.button.pay('Купить 15 генераций (50 ⭐️)')],
+        [Markup.button.pay('Купить 40 генераций (100 ⭐️)')]
+    ]));
+  });
+  
+  // Custom command to trigger specific invoice dynamically in Telegram
+  bot.action('buy_15', (ctx) => {
+     ctx.replyWithInvoice({
+      title: 'Пакет 15', description: '15 дополнительных генераций аудио', payload: 'pkg_15',
+      provider_token: '', currency: 'XTR', prices: [{ label: 'Пакет 15', amount: 50 }]
     });
+  });
+  
+  bot.action('buy_40', (ctx) => {
+     ctx.replyWithInvoice({
+      title: 'Пакет 40', description: '40 дополнительных генераций аудио', payload: 'pkg_40',
+      provider_token: '', currency: 'XTR', prices: [{ label: 'Пакет 40', amount: 100 }]
+    });
+  });
+
+  bot.hears('⭐️ Купить генерации', (ctx) => {
+      ctx.reply('Дополнительные генерации без суточных ограничений:', Markup.inlineKeyboard([
+          [Markup.button.callback('15 генераций - 50 ⭐️', 'buy_15')],
+          [Markup.button.callback('40 генераций - 100 ⭐️', 'buy_40')]
+      ]));
   });
 
   bot.on('pre_checkout_query', (ctx) => ctx.answerPreCheckoutQuery(true));
 
   bot.on('successful_payment', async (ctx) => {
-    await ctx.reply('Огромное спасибо за вашу поддержку! 🌟');
+    const payload = ctx.message.successful_payment.invoice_payload;
+    const users = loadUsers();
+    const user = users[ctx.from!.id] || {} as UserData;
+    let added = 0;
+    
+    if (payload === 'pkg_15') added = 15;
+    if (payload === 'pkg_40') added = 40;
+    
+    saveUser({
+        id: ctx.from!.id,
+        purchasedGens: (user.purchasedGens || 0) + added
+    });
+    
+    await ctx.reply(`🌟 Оплата прошла успешно! Вам начислено +${added} генераций!`);
   });
 
   bot.action('admin_stats', (ctx) => {
@@ -309,9 +385,14 @@ function setupBotLogic(bot: Telegraf) {
     if (text.startsWith('/')) return;
 
     try {
-      await ctx.sendChatAction('record_voice');
       const users = loadUsers();
       const user = users[ctx.from!.id] || { voice: 'Kore', scenario: undefined } as Partial<UserData>;
+      
+      if (!checkUserQuota(user) && ctx.from!.id !== ADMIN_ID) {
+          return ctx.reply('⚠️ Вы исчерпали бесплатный лимит на сегодня (10/10). Лимит обновится завтра. Вы можете купить дополнительные генерации за Telegram Звезды ⭐️, нажав кнопку "Купить генерации" в меню.');
+      }
+      
+      await ctx.sendChatAction('record_voice');
       
       const styles: Record<string, string> = {
         news: 'Read this in a professional news anchor tone',
@@ -432,6 +513,8 @@ function setupBotLogic(bot: Telegraf) {
         wavHeader.writeUInt32LE(dataSize, 40);
         
         const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
+        
+        consumeUserQuota(user, ctx.from!.id);
         
         saveUser({ 
            id: ctx.from!.id, 

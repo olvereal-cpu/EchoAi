@@ -291,6 +291,23 @@ export default function App() {
   const handleGenerate = async () => {
     if (!text.trim()) return;
     
+    // Website Quota Logic
+    const today = new Date().toISOString().split('T')[0];
+    const savedQuotaStr = localStorage.getItem('tts_quota');
+    let dailyGens = 0;
+    
+    if (savedQuotaStr) {
+       const quotaState = JSON.parse(savedQuotaStr);
+       if (quotaState.date === today) {
+           dailyGens = quotaState.count;
+       }
+    }
+    
+    if (dailyGens >= 10) {
+        setError(lang === 'ru' ? '⚠️ Вы исчерпали бесплатный лимит на веб-версии (10/10). Пожалуйста, воспользуйтесь Telegram-ботом, чтобы подключить расширения.' : '⚠️ You have reached your local free limit (10/10). Use the Telegram bot to unlock limits.');
+        return;
+    }
+    
     setIsGenerating(true);
     setError(null);
     
@@ -326,6 +343,12 @@ export default function App() {
       
       if (base64Audio) {
         setLastAudioData(base64Audio);
+        
+        localStorage.setItem('tts_quota', JSON.stringify({
+            date: today,
+            count: dailyGens + 1
+        }));
+
         // Add to history
         const newEntry: TtsHistory = {
           id: crypto.randomUUID(),
