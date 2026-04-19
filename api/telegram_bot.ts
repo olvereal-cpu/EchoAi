@@ -253,9 +253,12 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.action('admin_set_webhook', async (ctx) => {
     if (ctx.from!.id !== ADMIN_ID) return;
-    const projectUrl = process.env.PROJECT_URL || ctx.host;
+    
+    // Fallback chain for the project URL
+    const projectUrl = process.env.PROJECT_URL || process.env.APP_URL?.replace('https://', '').replace(/\/$/, '') || '';
+    
     if (!projectUrl) {
-      return ctx.reply('❌ Ошибка: PROJECT_URL не задан в переменных окружения.');
+      return ctx.reply('❌ Ошибка: PROJECT_URL не задан. Укажите его в настройках (например: echovox-bot.vercel.app)');
     }
     
     try {
@@ -425,7 +428,7 @@ function setupBotLogic(bot: Telegraf) {
         if(u.audioCount) totalAudio += u.audioCount;
     });
     
-    ctx.reply(`📊 **Статистика Бота:**\n\n👥 Всего пользователей: ${count}\n🔡 Сгенерировано символов: ${totalChars}\n🎧 Аудио сгенерировано: ${totalAudio}`, {parse_mode: 'Markdown'});
+    ctx.reply(`📊 **Статистика Бота:**\n\n👥 Всего пользователей: ${count}\n🔡 Сгенерировано символов: ${totalChars}\n🎧 Аудио сгенерировано: ${totalAudio}`);
   });
 
   bot.action('admin_export', async (ctx) => {
@@ -484,9 +487,8 @@ function setupBotLogic(bot: Telegraf) {
     });
   });
 
-  bot.on('text', checkSub, async (ctx) => {
-    const text = ctx.message.text;
-    if (text.startsWith('/')) return;
+  async function processSynthesis(ctx: Context, text: string) {
+    if (!text || text.trim().length === 0) return;
 
     try {
       const user = await loadUser(ctx.from!.id);
@@ -519,19 +521,20 @@ function setupBotLogic(bot: Telegraf) {
         return await ctx.reply('⚠️ Ошибка: На сервере не задан ни один API-ключ Gemini.');
       }
       
-      const currentAi = new GoogleGenAI({ apiKey: API_KEYS[0] });
       let textToSpeak = text;
 
       // STEP 1: Process text through normal LLM if translation is needed
       if (user.targetLang && langNames[user.targetLang]) {
           try {
+             const currentAi = new GoogleGenAI({ apiKey: API_KEYS[0] });
              let prepPrompt = `Translate the following text into ${langNames[user.targetLang]}. ONLY output the translated text, without any conversational filler or markdown formatting.\n\nText: ${text}`;
              const textResp = await currentAi.models.generateContent({
                  model: "gemini-3-flash-preview",
-                 contents: prepPrompt
+                 contents: [{ role: 'user', parts: [{ text: prepPrompt }] }]
              });
-             if (textResp.text) {
-                 textToSpeak = textResp.text.trim();
+             const responseText = textResp.text;
+             if (responseText) {
+                 textToSpeak = responseText.trim();
              }
           } catch(e) {
              console.error("Translation prep failed:", e);
@@ -554,11 +557,11 @@ function setupBotLogic(bot: Telegraf) {
           const currentKey = shuffledKeys[i];
           try {
               const currentAi = new GoogleGenAI({ apiKey: currentKey });
-              response = await (currentAi as any).models.generateContent({
+              response = await currentAi.models.generateContent({ 
                 model: "gemini-3.1-flash-tts-preview",
-                contents: [{ parts: [{ text: finalTTSPrompt }] }],
+                contents: [{ role: 'user', parts: [{ text: finalTTSPrompt }] }],
                 config: {
-                  responseModalities: ["AUDIO"],
+                  responseModalities: ["AUDIO" as any],
                   speechConfig: {
                     voiceConfig: {
                       prebuiltVoiceConfig: { voiceName: user.voice || 'Kore' },
@@ -570,9 +573,8 @@ function setupBotLogic(bot: Telegraf) {
               break;
           } catch (apiErr: any) {
                const status = apiErr?.status || apiErr?.response?.status;
-               const isQuotaError = status === 429 || apiErr?.message?.includes('429') || apiErr?.message?.includes('Quota exceeded');
-               if (isQuotaError) {
-                   console.warn(`Key ${i + 1}/${shuffledKeys.length} hit quota limit. Trying next...`);
+               if (status === 429 || apiErr?.message?.includes('429')) {
+                   console.warn(`Key ${i + 1}/${shuffledKeys.length} hit quota. Trying next...`);
                    lastError = apiErr;
                    continue;
                } else {
@@ -584,15 +586,12 @@ function setupBotLogic(bot: Telegraf) {
       }
 
       if (!success) {
-        console.error('All keys exhausted or failed:', lastError);
-        return await ctx.reply('⚠️ Ошибка: Все доступные API-ключи исчерпали свой лимит (квоту).');
+        return await ctx.reply(`⚠️ Ошибка: Все API-ключи исчерпали лимит или произошла критическая ошибка: ${lastError?.message || 'Unknown'}`);
       }
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio && base64Audio.length > 100) {
-        // Fast conversion of base64 to Buffer
         const pcmBuffer = Buffer.from(base64Audio, 'base64');
-        
         const numChannels = 1;
         const sampleRate = 24000;
         const bitsPerSample = 16;
@@ -607,7 +606,7 @@ function setupBotLogic(bot: Telegraf) {
         wavHeader.write('WAVE', 8);
         wavHeader.write('fmt ', 12);
         wavHeader.writeUInt32LE(16, 16);
-        wavHeader.writeUInt16LE(1, 20); // PCM format chunk
+        wavHeader.writeUInt16LE(1, 20);
         wavHeader.writeUInt16LE(numChannels, 22);
         wavHeader.writeUInt32LE(sampleRate, 24);
         wavHeader.writeUInt32LE(byteRate, 28);
@@ -619,7 +618,6 @@ function setupBotLogic(bot: Telegraf) {
         const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
         
         await consumeQuota(user, ctx.from!.id);
-        
         await saveUser({ 
            ...user,
            id: ctx.from!.id, 
@@ -630,13 +628,18 @@ function setupBotLogic(bot: Telegraf) {
         await ctx.replyWithVoice({ source: finalWav }, { caption: '🔊 Аудио готово' });
       } else {
          const debugInfo = JSON.stringify(response.candidates?.[0] || 'No candidates');
-         console.error('Empty audio data. Gemini Response:', debugInfo);
-         return await ctx.reply(`⚠️ Ошибка: синтезатор вернул пустые данные.\n\nДетали ответа Gemini: ${debugInfo.substring(0, 1000)}`);
+         return await ctx.reply(`⚠️ Ошибка: синтезатор вернул пустые данные. Детали: ${debugInfo.substring(0, 500)}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      await ctx.reply(`⚠️ Ошибка синтеза: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(`⚠️ Ошибка синтеза: ${err.message || String(err)}`);
     }
+  }
+
+  bot.on('text', checkSub, async (ctx) => {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) return;
+    await processSynthesis(ctx, text);
   });
 
   bot.on('document', checkSub, async (ctx) => {
@@ -646,34 +649,24 @@ function setupBotLogic(bot: Telegraf) {
         return ctx.reply('Пожалуйста, отправьте текстовый файл (.txt) для озвучки.');
       }
       
-      if (doc.file_size && doc.file_size > 4000) {
-        return ctx.reply('⚠️ Файл слишком большой. Для работы в бесплатном облаке Vercel максимальный размер файла - 4 КБ. Пожалуйста, разбейте текст на части.');
-      }
-
       const fileUrl = await ctx.telegram.getFileLink(doc.file_id);
-      const response = await fetch(fileUrl);
-      const text = await response.text();
+      const fetchResp = await fetch(fileUrl);
+      const text = await fetchResp.text();
       
       if (!text || text.trim().length === 0) {
           return ctx.reply('Файл пуст.');
       }
       
-      // Simulate sending the text through the normal text handler by spoofing the message
-      ctx.message.text = text.substring(0, 4000); // safety boundary
-      await ctx.reply('📄 Файл принят! Начинаю генерацию аудио... (это может занять до 20 секунд).');
-      bot.handleUpdate({
-          update_id: ctx.update.update_id + 1000000,
-          message: ctx.message
-      } as any);
+      await ctx.reply('📄 Файл принят! Начинаю генерацию аудио...');
+      await processSynthesis(ctx, text.substring(0, 5000));
 
-    } catch (e) {
+    } catch (e: any) {
       console.error("Document parsing error", e);
-      ctx.reply('❌ Ошибка при чтении файла.');
+      ctx.reply(`❌ Ошибка при чтении файла: ${e.message}`);
     }
   });
 
   // Always start polling in the internal environment to ensure the bot stays responsive.
-  // We only disable it if WEBHOOK_MODE is explicitly set (for production).
   if (process.env.WEBHOOK_MODE !== 'true') {
      console.log('🚀 Attempting to launch polling bot...');
      bot.launch()

@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Since the bot acts as a proxy for Telegram users, and we are using the client SDK 
+    // in a server-side context without explicit Auth login, we need to allow access.
+    // In a real production app with users, we would use Firebase Auth.
+    // For this bot, the backend handles the logic. 
+    
+    match /bot_users/{userId} {
+      allow read, write: if true; // The bot needs to manage users
+    }
+
+    match /bot_stats/{document} {
+      allow read, write: if true; // The bot needs to manage stats
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Telegram bot user data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Telegram User ID" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "voice": { "type": "string" },
+        "scenario": { "type": "string" },
+        "targetLang": { "type": "string" },
+        "charsGenerated": { "type": "number" },
+        "audioCount": { "type": "number" },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "lastResetDate": { "type": "string" },
+        "dailyGens": { "type": "number" },
+        "purchasedGens": { "type": "number" }
+      },
+      "required": ["id"]
+    },
+    "GlobalStat": {
+      "title": "Global State",
+      "description": "Daily global usage stats",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "count": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/bot_users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and quotas"
+    },
+    "/bot_stats/global_daily": {
+      "schema": "GlobalStat",
+      "description": "Global daily generation counter"
+    }
+  }
+}
