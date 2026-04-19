@@ -270,7 +270,11 @@ function setupBotLogic(bot: Telegraf) {
       await ctx.telegram.setWebhook(webhookUrl);
       ctx.reply(`✅ Webhook установлен:\n${webhookUrl}\n\n⚠️ Внимание: Теперь бот будет отвечать только через Vercel. Поллинг в AI Studio остановлен.`);
     } catch (e: any) {
-      ctx.reply(`❌ Ошибка установки Webhook: ${e.message}`);
+      if (e.message?.includes('429')) {
+        ctx.reply('⏳ Слишком много запросов. Telegram просит подождать 1-5 секунд перед повторной установкой вебхука. Попробуйте еще раз сейчас.');
+      } else {
+        ctx.reply(`❌ Ошибка установки Webhook: ${e.message}`);
+      }
     }
   });
 
