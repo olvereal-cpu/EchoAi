@@ -63,6 +63,35 @@ function setupBotLogic(bot: Telegraf) {
     }
   }
 
+  // --- Audio Utils ---
+  function createWavBuffer(base64Audio: string): Buffer {
+    const pcmBuffer = Buffer.from(base64Audio, 'base64');
+    const numChannels = 1;
+    const sampleRate = 24000;
+    const bitsPerSample = 16;
+    const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const dataSize = pcmBuffer.length;
+    const chunkSize = 36 + dataSize;
+    
+    const wavHeader = Buffer.alloc(44);
+    wavHeader.write('RIFF', 0);
+    wavHeader.writeUInt32LE(chunkSize, 4);
+    wavHeader.write('WAVE', 8);
+    wavHeader.write('fmt ', 12);
+    wavHeader.writeUInt32LE(16, 16);
+    wavHeader.writeUInt16LE(1, 20); // PCM format chunk
+    wavHeader.writeUInt16LE(numChannels, 22);
+    wavHeader.writeUInt32LE(sampleRate, 24);
+    wavHeader.writeUInt32LE(byteRate, 28);
+    wavHeader.writeUInt16LE(blockAlign, 32);
+    wavHeader.writeUInt16LE(bitsPerSample, 34);
+    wavHeader.write('data', 36);
+    wavHeader.writeUInt32LE(dataSize, 40);
+    
+    return Buffer.concat([wavHeader, pcmBuffer]);
+  }
+
   // --- Keyboards ---
   const getMainMenu = () => {
     return Markup.keyboard([
@@ -83,8 +112,10 @@ function setupBotLogic(bot: Telegraf) {
   const getScenarioMenu = () => {
     return Markup.inlineKeyboard([
       [Markup.button.callback('🎙️ Новости', 'scen_news'), Markup.button.callback('📖 Книга', 'scen_book')],
-      [Markup.button.callback('🤫 Шепот (ASMR)', 'scen_whisper'), Markup.button.callback('🤬 Злобно', 'scen_angry')],
-      [Markup.button.callback('🤪 Сарказм', 'scen_sarcastic'), Markup.button.callback('❌ Обычный голос', 'scen_none')]
+      [Markup.button.callback('📱 Сторис', 'scen_stories'), Markup.button.callback('⚡ Shorts', 'scen_shorts')],
+      [Markup.button.callback('💬 Диалог', 'scen_dialogue'), Markup.button.callback('🤫 Шепот (ASMR)', 'scen_whisper')],
+      [Markup.button.callback('🤬 Злобно', 'scen_angry'), Markup.button.callback('🤪 Сарказм', 'scen_sarcastic')],
+      [Markup.button.callback('❌ Обычный голос', 'scen_none')]
     ]);
   };
 
@@ -163,8 +194,8 @@ function setupBotLogic(bot: Telegraf) {
             });
             const base64Audio = resp.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
-                const audioBuffer = Buffer.from(base64Audio, 'base64');
-                await ctx.replyWithVoice({ source: audioBuffer });
+                const finalWavBuffer = createWavBuffer(base64Audio);
+                await ctx.replyWithVoice({ source: finalWavBuffer });
             }
         } catch (e) {
             console.warn("Failed preview", e);
@@ -179,6 +210,9 @@ function setupBotLogic(bot: Telegraf) {
     const msgs: Record<string, string> = {
       news: 'Диктор новостей 🎙️',
       book: 'Аудиокнига 📖',
+      stories: 'Эмоциональный для Сторис 📱',
+      shorts: 'Динамичный для Shorts ⚡',
+      dialogue: 'Естественный диалог 💬',
       whisper: 'Мягкий шепот 🤫',
       angry: 'Злобно и экспрессивно 🤬',
       sarcastic: 'Сарказм 🤪',
@@ -207,7 +241,20 @@ function setupBotLogic(bot: Telegraf) {
   });
 
   bot.hears('⭐️ Поддержать проект', (ctx) => {
-    ctx.reply('⭐️ **Спасибо за поддержку!**\nВы можете поддержать нас, поделившись этим ботом с друзьями!');
+    return ctx.replyWithInvoice({
+      title: 'Поддержка проекта',
+      description: 'Отправить 50 Telegram ⭐️ разработчику бота.',
+      payload: 'donate_50_stars',
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: 'Поддержка', amount: 50 }]
+    });
+  });
+
+  bot.on('pre_checkout_query', (ctx) => ctx.answerPreCheckoutQuery(true));
+
+  bot.on('successful_payment', async (ctx) => {
+    await ctx.reply('Огромное спасибо за вашу поддержку! 🌟');
   });
 
   bot.action('admin_stats', (ctx) => {
