@@ -178,28 +178,36 @@ function setupBotLogic(bot: Telegraf) {
     await ctx.reply(`✅ Голос изменен на **${voice}**. Генерирую предпрослушивание...`, {parse_mode: 'Markdown'});
     
     // Auto-generate preview
-    const keysString = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
+    const keysString = process.env.GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
     const API_KEYS = keysString.split(',').map(k => k.trim()).filter(k => k.length > 0);
-    if(API_KEYS.length > 0) {
-        try {
-            await ctx.sendChatAction('record_voice');
-            const ai = new GoogleGenAI({ apiKey: API_KEYS[0] });
-            const resp = await (ai as any).models.generateContent({
-              model: "gemini-3.1-flash-tts-preview",
-              contents: [{ parts: [{ text: `Привет! Это голос ${voice}. Я готов озвучить любой твой текст.` }] }],
-              config: {
-                responseModalities: ["AUDIO"],
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-              },
-            });
-            const base64Audio = resp.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-            if (base64Audio) {
-                const finalWavBuffer = createWavBuffer(base64Audio);
-                await ctx.replyWithVoice({ source: finalWavBuffer });
-            }
-        } catch (e) {
-            console.warn("Failed preview", e);
+    
+    if(API_KEYS.length === 0) {
+        return await ctx.reply("⚠️ Ключ API не найден для предпрослушивания.");
+    }
+
+    try {
+        await ctx.sendChatAction('record_voice');
+        const ai = new GoogleGenAI({ apiKey: API_KEYS[0] });
+        const resp = await (ai as any).models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `Привет! Это голос ${voice}. Я готов озвучить любой твой текст.` }] }],
+          config: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          },
+        });
+        
+        const base64Audio = resp.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+            const finalWavBuffer = createWavBuffer(base64Audio);
+            await ctx.replyWithVoice({ source: finalWavBuffer });
+        } else {
+             const debugInfo = JSON.stringify(resp.candidates?.[0] || 'No candidates');
+             await ctx.reply(`⚠️ Предпрослушивание: пустые данные от API. Детали: ${debugInfo.substring(0, 500)}`);
         }
+    } catch (e: any) {
+        console.warn("Failed preview", e);
+        await ctx.reply(`⚠️ Ошибка предпрослушивания: ${e.message || String(e)}`);
     }
   });
 
