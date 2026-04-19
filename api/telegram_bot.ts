@@ -271,23 +271,37 @@ function setupBotLogic(bot: Telegraf) {
         DE: 'German', JA: 'Japanese'
       };
 
-      let prompt = text;
-      
-      if (user.targetLang && langNames[user.targetLang]) {
-          prompt = `First, translate the following text to ${langNames[user.targetLang]}. Then, read the translated text aloud.`;
-          if (user.scenario && styles[user.scenario]) {
-             prompt += ` ${styles[user.scenario]}.`;
-          }
-          prompt += `\n\nText: ${text}`;
-      } else if (user.scenario && styles[user.scenario]) {
-          prompt = `${styles[user.scenario]}: ${text}`;
-      }
-
       const keysString = process.env.GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEYS || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
       const API_KEYS = keysString.split(',').map(k => k.trim()).filter(k => k.length > 0);
 
       if (API_KEYS.length === 0) {
         return await ctx.reply('⚠️ Ошибка: На сервере не задан ни один API-ключ Gemini.');
+      }
+      
+      const currentAi = new GoogleGenAI({ apiKey: API_KEYS[0] });
+      let textToSpeak = text;
+
+      // STEP 1: Process text through normal LLM if translation is needed
+      if (user.targetLang && langNames[user.targetLang]) {
+          try {
+             let prepPrompt = `Translate the following text into ${langNames[user.targetLang]}. ONLY output the translated text, without any conversational filler or markdown formatting.\n\nText: ${text}`;
+             const textResp = await currentAi.models.generateContent({
+                 model: "gemini-3.1-flash-preview",
+                 contents: prepPrompt
+             });
+             if (textResp.text) {
+                 textToSpeak = textResp.text.trim();
+             }
+          } catch(e) {
+             console.error("Translation prep failed:", e);
+             await ctx.reply("⚠️ Ошибка автоперевода. Попытка озвучить оригинал...");
+          }
+      }
+      
+      // STEP 2: Apply emotion prompt prefix for TTS
+      let finalTTSPrompt = textToSpeak;
+      if (user.scenario && styles[user.scenario]) {
+          finalTTSPrompt = `${styles[user.scenario]}:\n${textToSpeak}`;
       }
 
       const shuffledKeys = [...API_KEYS].sort(() => 0.5 - Math.random());
@@ -301,7 +315,7 @@ function setupBotLogic(bot: Telegraf) {
               const currentAi = new GoogleGenAI({ apiKey: currentKey });
               response = await (currentAi as any).models.generateContent({
                 model: "gemini-3.1-flash-tts-preview",
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ parts: [{ text: finalTTSPrompt }] }],
                 config: {
                   responseModalities: ["AUDIO"],
                   speechConfig: {
