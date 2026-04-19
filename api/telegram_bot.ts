@@ -243,6 +243,27 @@ function setupBotLogic(bot: Telegraf) {
       Markup.inlineKeyboard([[Markup.button.url('✅ Подписаться', CHANNEL_LINK)]]));
   };
 
+  bot.command('id', async (ctx) => {
+    ctx.reply(`🆔 Ваш ID: ${ctx.from.id}\n👑 Admin ID: ${ADMIN_ID}\n${ctx.from.id === ADMIN_ID ? '✅ Вы администратор' : '❌ Вы не администратор'}`);
+  });
+
+  bot.command('debug', async (ctx) => {
+    const isAd = ctx.from.id === ADMIN_ID;
+    let subStatus = 'Unknown';
+    if (REQ_CHANNEL_ID) {
+      try {
+        const member = await ctx.telegram.getChatMember(REQ_CHANNEL_ID, ctx.from.id);
+        subStatus = member.status;
+      } catch (e: any) {
+        subStatus = `Error: ${e.message}`;
+      }
+    } else {
+      subStatus = 'No required channel';
+    }
+    
+    ctx.reply(`🛠 **Debug Info**\n\n👤 ID: ${ctx.from.id}\n👑 Admin ID: ${ADMIN_ID}\n📢 Channel: ${REQ_CHANNEL_ID || 'None'}\n📡 Sub Status: ${subStatus}`, { parse_mode: 'Markdown' });
+  });
+
   // --- Handlers ---
   bot.start(async (ctx) => {
     const user: UserData = {
@@ -720,7 +741,14 @@ function setupBotLogic(bot: Telegraf) {
 }
 
 // Initialize bot for local development (polling) if not on Vercel
-if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1' && process.env.WEBHOOK_MODE !== 'true') {
+const isProd = process.env.NODE_ENV === 'production';
+const isVercel = process.env.VERCEL === '1';
+const isWebhook = process.env.WEBHOOK_MODE === 'true';
+
+console.log(`🤖 Bot Startup Check: ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}, WEBHOOK=${process.env.WEBHOOK_MODE}`);
+
+if (!isVercel && !isWebhook) {
+  console.log('🔌 Triggering getBot() for local polling...');
   getBot();
 }
 
