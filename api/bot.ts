@@ -6,6 +6,15 @@ export default async (req: any, res: any) => {
     if (req.method === 'POST') {
       if (bot) {
         try {
+          // Emergency Queue Clearer: If the message is older than 5 minutes, 
+          // skip processing to clear the backlog and avoid Vercel timeouts/OOM.
+          const msgDate = req.body?.message?.date || req.body?.callback_query?.message?.date;
+          const now = Math.floor(Date.now() / 1000);
+          if (msgDate && (now - msgDate > 300)) {
+             console.log('Skipping old stuck message to clear Telegram queue.');
+             return res.status(200).send('OK');
+          }
+
           await bot.handleUpdate(req.body);
         } catch (handleErr) {
           console.error('Error within bot.handleUpdate:', handleErr);
