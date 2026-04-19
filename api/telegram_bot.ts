@@ -371,11 +371,13 @@ function setupBotLogic(bot: Telegraf) {
 
         await ctx.replyWithVoice({ source: finalWav }, { caption: '🔊 Аудио готово' });
       } else {
-         return await ctx.reply('⚠️ Ошибка: синтезатор вернул пустые данные.');
+         const debugInfo = JSON.stringify(response.candidates?.[0] || 'No candidates');
+         console.error('Empty audio data. Gemini Response:', debugInfo);
+         return await ctx.reply(`⚠️ Ошибка: синтезатор вернул пустые данные.\n\nДетали ответа Gemini: ${debugInfo.substring(0, 1000)}`);
       }
     } catch (err) {
       console.error(err);
-      await ctx.reply('⚠️ Ошибка синтеза.');
+      await ctx.reply(`⚠️ Ошибка синтеза: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 
