@@ -254,7 +254,6 @@ function setupBotLogic(bot: Telegraf) {
   bot.action('admin_set_webhook', async (ctx) => {
     if (ctx.from!.id !== ADMIN_ID) return;
     
-    // Fallback chain for the project URL
     const projectUrl = process.env.PROJECT_URL || process.env.APP_URL?.replace('https://', '').replace(/\/$/, '') || '';
     
     if (!projectUrl) {
@@ -264,19 +263,45 @@ function setupBotLogic(bot: Telegraf) {
     try {
       const webhookUrl = `https://${projectUrl}/api/telegram_bot`;
       await ctx.telegram.setWebhook(webhookUrl);
-      ctx.reply(`✅ Webhook установлен:\n${webhookUrl}`);
+      ctx.reply(`✅ Webhook установлен:\n${webhookUrl}\n\n⚠️ Внимание: Теперь бот будет отвечать только через Vercel. Поллинг в AI Studio остановлен.`);
     } catch (e: any) {
       ctx.reply(`❌ Ошибка установки Webhook: ${e.message}`);
+    }
+  });
+
+  bot.action('admin_delete_webhook', async (ctx) => {
+    if (ctx.from!.id !== ADMIN_ID) return;
+    try {
+      await ctx.telegram.deleteWebhook();
+      ctx.reply('🗑 Webhook удален. Бот возвращается в режим Поллинга. Подождите 1-2 минуты, пока AI Studio подхватит обновления.');
+    } catch (e: any) {
+      ctx.reply(`❌ Ошибка удаления Webhook: ${e.message}`);
+    }
+  });
+
+  bot.action('admin_webhook_info', async (ctx) => {
+    if (ctx.from!.id !== ADMIN_ID) return;
+    try {
+      const info = await ctx.telegram.getWebhookInfo();
+      const text = `ℹ️ **Webhook Info:**\n\n` +
+                   `🔗 URL: ${info.url || 'Не установлен'}\n` +
+                   `📅 Has Custom Cert: ${info.has_custom_certificate}\n` +
+                   `📊 Pending Updates: ${info.pending_update_count}\n` +
+                   `❌ Last Error: ${info.last_error_message || 'Нет'}\n` +
+                   `🕒 Last Error Date: ${info.last_error_date ? new Date(info.last_error_date * 1000).toLocaleString() : 'Нет'}`;
+      ctx.reply(text, { parse_mode: 'Markdown' });
+    } catch (e: any) {
+      ctx.reply(`❌ Ошибка получения инфо: ${e.message}`);
     }
   });
 
   bot.command('admin', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply('🛠 Админ-панель EchoVox', Markup.inlineKeyboard([
-      [Markup.button.callback('📊 Статистика', 'admin_stats')],
-      [Markup.button.callback('📥 Скачать базу (TXT)', 'admin_export')],
+      [Markup.button.callback('📊 Статистика', 'admin_stats'), Markup.button.callback('📥 База (TXT)', 'admin_export')],
       [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
-      [Markup.button.callback('🌐 Установить Webhook', 'admin_set_webhook')]
+      [Markup.button.callback('🌐 Установить Webhook', 'admin_set_webhook')],
+      [Markup.button.callback('🗑 Удалить Webhook', 'admin_delete_webhook'), Markup.button.callback('ℹ️ Инфо Webhook', 'admin_webhook_info')]
     ]));
   });
 
@@ -681,19 +706,29 @@ export { bot };
 
 // Vercel Serverless Function Handler
 export default async (req: any, res: any) => {
+  console.log(`📡 Incoming Update [${req.method}]:`, JSON.stringify(req.body));
+  
   if (!bot) {
-    return res.status(500).send('Bot not initialized');
+    console.error('❌ Bot not initialized: BOT_TOKEN might be missing in Environment Variables.');
+    return res.status(500).send('Bot not initialized. Check TELEGRAM_BOT_TOKEN.');
   }
 
   if (req.method === 'POST') {
     try {
       await bot.handleUpdate(req.body);
+      console.log('✅ Update processed successfully.');
       res.status(200).send('OK');
     } catch (err) {
-      console.error('Error handling update:', err);
-      res.status(500).send('Error');
+      console.error('❌ Error handling update:', err);
+      res.status(500).send('Error processing update');
     }
   } else {
-    res.status(200).send('EchoVox Bot is running');
+    // Basic health check for browser access
+    const info = await bot.telegram.getMe().catch(() => null);
+    res.status(200).json({
+       status: 'running',
+       bot_username: info?.username || 'unknown',
+       webhook_mode: process.env.WEBHOOK_MODE === 'true'
+    });
   }
 };
