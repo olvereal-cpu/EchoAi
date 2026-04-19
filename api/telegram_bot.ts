@@ -3,36 +3,41 @@ import { GoogleGenAI, Modality } from '@google/genai';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
-import { db } from './firestore';
+import { db } from './firestore.js';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore/lite';
 
 dotenv.config();
 
 // --- Configuration ---
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_ID = Number(process.env.ADMIN_ID);
+const ADMIN_ID = Number(process.env.ADMIN_ID) || 0;
 const REQ_CHANNEL_ID = process.env.REQUIRED_CHANNEL_ID;
 const CHANNEL_LINK = process.env.CHANNEL_LINK || 'https://t.me/ais_build';
 
 let bot: Telegraf | null = null;
+let botInitialized = false;
 
-if (!BOT_TOKEN) {
-  console.warn('⚠️ Warning: Missing TELEGRAM_BOT_TOKEN. Telegram bot is disabled.');
-} else {
-  bot = new Telegraf(BOT_TOKEN);
+function getBot() {
+  if (botInitialized && bot) return bot;
   
-  // Robustness: handle any global bot errors to prevent crashes
-  bot.catch((err, ctx) => {
-    console.error(`❌ Telegraf error for ${ctx.updateType}:`, err);
-  });
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.warn('⚠️ TELEGRAM_BOT_TOKEN is missing.');
+    return null;
+  }
 
-  setupBotLogic(bot);
+  try {
+    bot = new Telegraf(token);
+    bot.catch((err, ctx) => {
+      console.error(`❌ Telegraf error for ${ctx.updateType}:`, err);
+    });
+    setupBotLogic(bot);
+    botInitialized = true;
+    return bot;
+  } catch (err) {
+    console.error('❌ Failed to initialize Telegraf:', err);
+    return null;
+  }
 }
-
-// Heartbeat to keep logs active and monitor uptime
-setInterval(() => {
-  console.log(`💓 Bot Heartbeat: ${new Date().toISOString()} (Uptime: ${process.uptime().toFixed(1)}s)`);
-}, 600000); // Every 10 mins
 
 function setupBotLogic(bot: Telegraf) {
   // --- Types ---
@@ -691,44 +696,54 @@ function setupBotLogic(bot: Telegraf) {
     }
   });
 
-  // Always start polling in the internal environment to ensure the bot stays responsive.
-  if (process.env.WEBHOOK_MODE !== 'true') {
-     console.log('🚀 Attempting to launch polling bot...');
+  // Only start polling if NOT on Vercel and explicitly allowed
+  const isVercel = process.env.VERCEL === '1';
+  const isWebhook = process.env.WEBHOOK_MODE === 'true';
+
+  if (!isVercel && !isWebhook) {
+     console.log('🚀 Launching polling bot...');
      bot.launch()
-       .then(() => console.log('✅ Polling Bot successfully started.'))
        .catch((err) => console.error('❌ Failed to launch bot:', err));
-  } else {
-     console.log('ℹ️ Bot mode: Webhook expected.');
   }
 }
 
-export { bot };
+// Initialize bot for local development (polling) if not on Vercel
+if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1' && process.env.WEBHOOK_MODE !== 'true') {
+  getBot();
+}
+
+export { getBot as getTelegrafBot };
 
 // Vercel Serverless Function Handler
 export default async (req: any, res: any) => {
-  console.log(`📡 Incoming Update [${req.method}]:`, JSON.stringify(req.body));
+  console.log(`📡 Incoming Update [${req.method}]`);
   
-  if (!bot) {
-    console.error('❌ Bot not initialized: BOT_TOKEN might be missing in Environment Variables.');
-    return res.status(500).send('Bot not initialized. Check TELEGRAM_BOT_TOKEN.');
+  const currentBot = getBot();
+  
+  if (!currentBot) {
+    console.error('❌ Bot not initialized: TOKEN is missing.');
+    return res.status(500).send('Check TELEGRAM_BOT_TOKEN environment variable.');
   }
 
   if (req.method === 'POST') {
     try {
-      await bot.handleUpdate(req.body);
-      console.log('✅ Update processed successfully.');
+      await currentBot.handleUpdate(req.body);
       res.status(200).send('OK');
     } catch (err) {
       console.error('❌ Error handling update:', err);
-      res.status(500).send('Error processing update');
+      res.status(500).send('Internal processing error');
     }
   } else {
-    // Basic health check for browser access
-    const info = await bot.telegram.getMe().catch(() => null);
-    res.status(200).json({
-       status: 'running',
-       bot_username: info?.username || 'unknown',
-       webhook_mode: process.env.WEBHOOK_MODE === 'true'
-    });
+    // Health check
+    try {
+      const info = await currentBot.telegram.getMe();
+      res.status(200).json({
+         status: 'ready',
+         bot: info.username,
+         webhook: process.env.WEBHOOK_MODE === 'true'
+      });
+    } catch (e: any) {
+      res.status(200).json({ status: 'running', error: e.message });
+    }
   }
 };
