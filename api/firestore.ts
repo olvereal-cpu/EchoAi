@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore/lite';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,7 +20,7 @@ try {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    console.log("🔥 Firebase initialized.");
+    console.log("🔥 Firebase initialized (Lite Mode).");
   } else {
     console.warn("⚠️ Firebase config not found at path:", configPath);
   }

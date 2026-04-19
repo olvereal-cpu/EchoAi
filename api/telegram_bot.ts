@@ -4,7 +4,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { db } from './firestore';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore/lite';
 
 dotenv.config();
 
@@ -20,8 +20,19 @@ if (!BOT_TOKEN) {
   console.warn('⚠️ Warning: Missing TELEGRAM_BOT_TOKEN. Telegram bot is disabled.');
 } else {
   bot = new Telegraf(BOT_TOKEN);
+  
+  // Robustness: handle any global bot errors to prevent crashes
+  bot.catch((err, ctx) => {
+    console.error(`❌ Telegraf error for ${ctx.updateType}:`, err);
+  });
+
   setupBotLogic(bot);
 }
+
+// Heartbeat to keep logs active and monitor uptime
+setInterval(() => {
+  console.log(`💓 Bot Heartbeat: ${new Date().toISOString()} (Uptime: ${process.uptime().toFixed(1)}s)`);
+}, 600000); // Every 10 mins
 
 function setupBotLogic(bot: Telegraf) {
   // --- Types ---
@@ -240,12 +251,29 @@ function setupBotLogic(bot: Telegraf) {
     await ctx.reply('🚀 Добро пожаловать в EchoVox.pro! Я превращаю текст в профессиональную озвучку. Просто напишите мне текст, и я пришлю вам готовый аудиофайл.', getMainMenu());
   });
 
+  bot.action('admin_set_webhook', async (ctx) => {
+    if (ctx.from!.id !== ADMIN_ID) return;
+    const projectUrl = process.env.PROJECT_URL || ctx.host;
+    if (!projectUrl) {
+      return ctx.reply('❌ Ошибка: PROJECT_URL не задан в переменных окружения.');
+    }
+    
+    try {
+      const webhookUrl = `https://${projectUrl}/api/telegram_bot`;
+      await ctx.telegram.setWebhook(webhookUrl);
+      ctx.reply(`✅ Webhook установлен:\n${webhookUrl}`);
+    } catch (e: any) {
+      ctx.reply(`❌ Ошибка установки Webhook: ${e.message}`);
+    }
+  });
+
   bot.command('admin', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     ctx.reply('🛠 Админ-панель EchoVox', Markup.inlineKeyboard([
       [Markup.button.callback('📊 Статистика', 'admin_stats')],
       [Markup.button.callback('📥 Скачать базу (TXT)', 'admin_export')],
-      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')]
+      [Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('🌐 Установить Webhook', 'admin_set_webhook')]
     ]));
   });
 
@@ -643,3 +671,22 @@ function setupBotLogic(bot: Telegraf) {
 }
 
 export { bot };
+
+// Vercel Serverless Function Handler
+export default async (req: any, res: any) => {
+  if (!bot) {
+    return res.status(500).send('Bot not initialized');
+  }
+
+  if (req.method === 'POST') {
+    try {
+      await bot.handleUpdate(req.body);
+      res.status(200).send('OK');
+    } catch (err) {
+      console.error('Error handling update:', err);
+      res.status(500).send('Error');
+    }
+  } else {
+    res.status(200).send('EchoVox Bot is running');
+  }
+};
