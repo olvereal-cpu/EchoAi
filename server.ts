@@ -2,8 +2,8 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-// We'll import the bot logic
-import "./api/telegram_bot.ts"; // Note: tsx will handle the execution
+// We'll import the bot logic and its Vercel handler
+import botHandler from "./api/telegram_bot.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,9 +12,17 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // API routes (if any)
+  // Middleware for parsing JSON (required for Telegram webhooks)
+  app.use(express.json());
+
+  // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Telegram Webhook route (matches Vercel path)
+  app.post("/api/telegram_bot", (req, res) => {
+    botHandler(req, res);
   });
 
   // Vite middleware for development
