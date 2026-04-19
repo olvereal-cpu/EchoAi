@@ -47,20 +47,58 @@ function setupBotLogic(bot: Telegraf) {
     return 10;
   }
 
-  function checkUserQuota(user: Partial<UserData>): boolean {
-    const today = new Date().toISOString().split('T')[0];
-    let dailyGens = user.dailyGens || 0;
-    
-    if (user.lastResetDate !== today) {
-      dailyGens = 0; // Reset
-    }
-    
-    const purchased = user.purchasedGens || 0;
-    return dailyGens < getDailyLimit() || purchased > 0;
+  async function checkQuota(user: Partial<UserData>, userId: number): Promise<{ allowed: boolean; reason?: string }> {
+     if (userId === ADMIN_ID) return { allowed: true };
+
+     const today = new Date().toISOString().split('T')[0];
+     
+     // 1. Global Daily Limit (e.g. 50 total for free tier)
+     if (db) {
+         try {
+             const globalRef = doc(db, 'bot_stats', 'global_daily');
+             const globalSnap = await getDoc(globalRef);
+             if (globalSnap.exists()) {
+                 const data = globalSnap.data();
+                 if (data.date === today && data.count >= 20) { 
+                     return { allowed: false, reason: '⚠️ Общий лимит бота на сегодня исчерпан (20/20). Попробуйте завтра!' };
+                 }
+             }
+         } catch(e) {}
+     }
+
+     // 2. Personal Limit
+     let dailyGens = user.dailyGens || 0;
+     if (user.lastResetDate !== today) {
+       dailyGens = 0; 
+     }
+     
+     const purchased = user.purchasedGens || 0;
+     const ok = dailyGens < getDailyLimit() || purchased > 0;
+     
+     if (!ok) {
+         return { allowed: false, reason: '⚠️ Вы исчерпали свой лимит (10/10). Лимит обновится завтра или вы можете купить доп. генерации ⭐️' };
+     }
+
+     return { allowed: true };
   }
 
-  async function consumeUserQuota(user: Partial<UserData>, id: number) {
+  async function consumeQuota(user: Partial<UserData>, id: number) {
     const today = new Date().toISOString().split('T')[0];
+    
+    // 1. Consume Global
+    if (db && id !== ADMIN_ID) {
+        try {
+            const globalRef = doc(db, 'bot_stats', 'global_daily');
+            const globalSnap = await getDoc(globalRef);
+            if (!globalSnap.exists() || globalSnap.data()?.date !== today) {
+                await setDoc(globalRef, { date: today, count: 1 });
+            } else {
+                await updateDoc(globalRef, { count: (globalSnap.data()?.count || 0) + 1 });
+            }
+        } catch(e) {}
+    }
+
+    // 2. Consume Personal
     let dailyGens = user.dailyGens || 0;
     let purchased = user.purchasedGens || 0;
     
@@ -75,6 +113,7 @@ function setupBotLogic(bot: Telegraf) {
     }
     
     await saveUser({
+       ...user,
        id,
        lastResetDate: today,
        dailyGens,
@@ -84,17 +123,17 @@ function setupBotLogic(bot: Telegraf) {
 
   // --- DB Helpers ---
   async function loadUser(id: number): Promise<Partial<UserData>> {
-    if (!db) return { voice: 'Kore', dailyGens: 0 };
+    if (!db) return { id, voice: 'Kore', dailyGens: 0 };
     try {
         const ref = doc(db, 'bot_users', String(id));
         const snap = await getDoc(ref);
         if (snap.exists()) {
-            return snap.data() as UserData;
+            return { ...snap.data(), id } as UserData;
         }
     } catch(e) {
         console.error("Firestore read error", e);
     }
-    return { voice: 'Kore', dailyGens: 0 };
+    return { id, voice: 'Kore', dailyGens: 0 };
   }
 
   async function saveUser(user: Partial<UserData> & { id: number }) {
@@ -402,9 +441,10 @@ function setupBotLogic(bot: Telegraf) {
 
     try {
       const user = await loadUser(ctx.from!.id);
+      const quota = await checkQuota(user, ctx.from!.id);
       
-      if (!checkUserQuota(user) && ctx.from!.id !== ADMIN_ID) {
-          return ctx.reply('⚠️ Вы исчерпали бесплатный лимит на сегодня (10/10). Лимит обновится завтра. Вы можете купить дополнительные генерации за Telegram Звезды ⭐️, нажав кнопку "Купить генерации" в меню.');
+      if (!quota.allowed) {
+          return ctx.reply(quota.reason!);
       }
       
       await ctx.sendChatAction('record_voice');
@@ -529,7 +569,7 @@ function setupBotLogic(bot: Telegraf) {
         
         const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
         
-        await consumeUserQuota(user, ctx.from!.id);
+        await consumeQuota(user, ctx.from!.id);
         
         await saveUser({ 
            ...user,
@@ -583,11 +623,12 @@ function setupBotLogic(bot: Telegraf) {
     }
   });
 
-  // Start polling only if strictly forced (disabled by default to prevent stealing Webhook from Vercel)
-  if (process.env.LOCAL_DEBUG_POLLING === 'true') {
-     bot.launch().then(() => console.log('✅ Polling Bot started.'));
+  // Start polling in non-production environments to keep it awake
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.LOCAL_DEBUG_POLLING === 'true';
+  if (isDev) {
+     bot.launch().then(() => console.log('✅ Polling Bot started (Dev Mode).'));
   } else {
-     console.log('ℹ️ Local polling disabled. Bot expects to run via Vercel Webhook in production.');
+     console.log('ℹ️ Bot mode: Webhook expected.');
   }
 }
 
