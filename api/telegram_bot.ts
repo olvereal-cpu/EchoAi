@@ -401,20 +401,27 @@ function setupBotLogic(bot: Telegraf) {
   });
 
   bot.action('admin_export', async (ctx) => {
-    if (!db) {
-       return ctx.reply("База данных недоступна");
+    try {
+      if (!db) {
+         return ctx.reply("База данных недоступна");
+      }
+      await ctx.answerCbQuery('Генерирую файл...');
+      const snap = await getDocs(collection(db, 'bot_users'));
+      let content = "";
+      snap.forEach(doc => {
+         const u = doc.data() as UserData;
+         content += `${u.id} | @${u.username || 'n/a'} | ${u.name}\n`;
+      });
+      
+      if (!content) {
+          return ctx.reply("База пользователей пуста.");
+      }
+
+      await ctx.replyWithDocument({ source: Buffer.from(content), filename: 'users.txt' });
+    } catch (e: any) {
+      console.error("Export error", e);
+      ctx.reply(`❌ Ошибка экспорта: ${e.message}`);
     }
-    const snap = await getDocs(collection(db, 'bot_users'));
-    let content = "";
-    snap.forEach(doc => {
-       const u = doc.data() as UserData;
-       content += `${u.id} | @${u.username || 'n/a'} | ${u.name}\n`;
-    });
-    
-    const filePath = path.join('/tmp', 'users_export.txt');
-    fs.writeFileSync(filePath, content);
-    await ctx.replyWithDocument({ source: filePath, filename: 'users.txt' });
-    fs.unlinkSync(filePath);
   });
 
   bot.action('admin_broadcast', (ctx) => {
@@ -623,10 +630,13 @@ function setupBotLogic(bot: Telegraf) {
     }
   });
 
-  // Start polling in non-production environments to keep it awake
-  const isDev = process.env.NODE_ENV !== 'production' || process.env.LOCAL_DEBUG_POLLING === 'true';
-  if (isDev) {
-     bot.launch().then(() => console.log('✅ Polling Bot started (Dev Mode).'));
+  // Always start polling in the internal environment to ensure the bot stays responsive.
+  // We only disable it if WEBHOOK_MODE is explicitly set (for production).
+  if (process.env.WEBHOOK_MODE !== 'true') {
+     console.log('🚀 Attempting to launch polling bot...');
+     bot.launch()
+       .then(() => console.log('✅ Polling Bot successfully started.'))
+       .catch((err) => console.error('❌ Failed to launch bot:', err));
   } else {
      console.log('ℹ️ Bot mode: Webhook expected.');
   }
