@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 // We'll import the bot logic
-import "./telegram_bot.js"; // Note: tsx will handle the execution
+import "./api/telegram_bot.ts"; // Note: tsx will handle the execution
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

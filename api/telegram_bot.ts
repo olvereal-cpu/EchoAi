@@ -3,6 +3,8 @@ import { GoogleGenAI, Modality } from '@google/genai';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { db } from './firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -22,10 +24,6 @@ if (!BOT_TOKEN) {
 }
 
 function setupBotLogic(bot: Telegraf) {
-  const USERS_FILE = path.join('/tmp', 'users.json');
-  // Fallback memory state since Vercel might destroy /tmp files on cold starts
-  const memoryDB: Record<number, UserData> = {};
-
   // --- Types ---
   interface UserData {
     id: number;
@@ -61,7 +59,7 @@ function setupBotLogic(bot: Telegraf) {
     return dailyGens < getDailyLimit() || purchased > 0;
   }
 
-  function consumeUserQuota(user: Partial<UserData>, id: number) {
+  async function consumeUserQuota(user: Partial<UserData>, id: number) {
     const today = new Date().toISOString().split('T')[0];
     let dailyGens = user.dailyGens || 0;
     let purchased = user.purchasedGens || 0;
@@ -76,7 +74,7 @@ function setupBotLogic(bot: Telegraf) {
       purchased--;
     }
     
-    saveUser({
+    await saveUser({
        id,
        lastResetDate: today,
        dailyGens,
@@ -85,26 +83,27 @@ function setupBotLogic(bot: Telegraf) {
   }
 
   // --- DB Helpers ---
-  function loadUsers(): Record<number, UserData> {
+  async function loadUser(id: number): Promise<Partial<UserData>> {
+    if (!db) return { voice: 'Kore', dailyGens: 0 };
     try {
-      if (fs.existsSync(USERS_FILE)) {
-        const diskData = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
-        Object.assign(memoryDB, diskData);
-      }
-    } catch (e) {
-      console.warn('Error reading users file:', e);
+        const ref = doc(db, 'bot_users', String(id));
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            return snap.data() as UserData;
+        }
+    } catch(e) {
+        console.error("Firestore read error", e);
     }
-    return memoryDB;
+    return { voice: 'Kore', dailyGens: 0 };
   }
 
-  function saveUser(user: Partial<UserData> & { id: number }) {
-    const users = loadUsers();
-    users[user.id] = { ...users[user.id], ...user } as UserData;
-    memoryDB[user.id] = users[user.id];
+  async function saveUser(user: Partial<UserData> & { id: number }) {
+    if (!db) return;
     try {
-      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    } catch (e: any) {
-      // Vercel /tmp write shouldn't fail, but if it does, it's saved in memoryDB
+        const ref = doc(db, 'bot_users', String(user.id));
+        await setDoc(ref, user, { merge: true });
+    } catch(e) {
+        console.error("Firestore write error", e);
     }
   }
 
@@ -198,7 +197,7 @@ function setupBotLogic(bot: Telegraf) {
       voice: 'Kore',
       joinedAt: new Date().toISOString()
     };
-    saveUser(user);
+    await saveUser(user);
     await ctx.reply('🚀 Добро пожаловать в EchoVox.pro! Я превращаю текст в профессиональную озвучку. Просто напишите мне текст, и я пришлю вам готовый аудиофайл.', getMainMenu());
   });
 
@@ -218,7 +217,8 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.action(/voice_(.+)/, async (ctx) => {
     const voice = ctx.match[1];
-    saveUser({ id: ctx.from!.id, voice });
+    const user = await loadUser(ctx.from!.id);
+    await saveUser({ ...user, id: ctx.from!.id, voice });
     await ctx.answerCbQuery(`Выбран: ${voice}`);
     await ctx.reply(`✅ Голос изменен на **${voice}**. Генерирую предпрослушивание...`, {parse_mode: 'Markdown'});
     
@@ -258,7 +258,8 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.action(/scen_(.+)/, async (ctx) => {
     const scen = ctx.match[1];
-    saveUser({ id: ctx.from!.id, scenario: scen === 'none' ? undefined : scen });
+    const user = await loadUser(ctx.from!.id);
+    await saveUser({ ...user, id: ctx.from!.id, scenario: scen === 'none' ? undefined : scen });
     
     const msgs: Record<string, string> = {
       news: 'Диктор новостей 🎙️',
@@ -278,7 +279,8 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.action(/lang_(.+)/, async (ctx) => {
     const lang = ctx.match[1];
-    saveUser({ id: ctx.from!.id, targetLang: lang === 'none' ? undefined : lang });
+    const user = await loadUser(ctx.from!.id);
+    await saveUser({ ...user, id: ctx.from!.id, targetLang: lang === 'none' ? undefined : lang });
     
     const langNames: Record<string, string> = {
       EN: 'Английский 🇬🇧', ES: 'Испанский 🇪🇸', FR: 'Французский 🇫🇷',
@@ -326,28 +328,32 @@ function setupBotLogic(bot: Telegraf) {
 
   bot.on('successful_payment', async (ctx) => {
     const payload = ctx.message.successful_payment.invoice_payload;
-    const users = loadUsers();
-    const user = users[ctx.from!.id] || {} as UserData;
+    const user = await loadUser(ctx.from!.id);
     let added = 0;
     
     if (payload === 'pkg_15') added = 15;
     if (payload === 'pkg_40') added = 40;
     
-    saveUser({
+    await saveUser({
+        ...user,
         id: ctx.from!.id,
         purchasedGens: (user.purchasedGens || 0) + added
     });
     
-    await ctx.reply(`🌟 Оплата прошла успешно! Вам начислено +${added} генераций!`);
+    await ctx.reply(`🌟 Оплата прошла успешно! Вам начислено +${added} генераций! Вы можете продолжать использование.`);
   });
 
-  bot.action('admin_stats', (ctx) => {
-    const users = loadUsers();
-    const count = Object.keys(users).length;
+  bot.action('admin_stats', async (ctx) => {
+    if (!db) {
+       return ctx.reply("База данных недоступна");
+    }
+    const snap = await getDocs(collection(db, 'bot_users'));
     let totalChars = 0;
     let totalAudio = 0;
-    
-    Object.values(users).forEach(u => {
+    let count = 0;
+    snap.forEach(doc => {
+        count++;
+        const u = doc.data() as UserData;
         if(u.charsGenerated) totalChars += u.charsGenerated;
         if(u.audioCount) totalAudio += u.audioCount;
     });
@@ -356,9 +362,17 @@ function setupBotLogic(bot: Telegraf) {
   });
 
   bot.action('admin_export', async (ctx) => {
-    const users = loadUsers();
-    const content = Object.values(users).map(u => `${u.id} | @${u.username || 'n/a'} | ${u.name}`).join('\n');
-    const filePath = path.join(process.cwd(), 'users_export.txt');
+    if (!db) {
+       return ctx.reply("База данных недоступна");
+    }
+    const snap = await getDocs(collection(db, 'bot_users'));
+    let content = "";
+    snap.forEach(doc => {
+       const u = doc.data() as UserData;
+       content += `${u.id} | @${u.username || 'n/a'} | ${u.name}\n`;
+    });
+    
+    const filePath = path.join('/tmp', 'users_export.txt');
     fs.writeFileSync(filePath, content);
     await ctx.replyWithDocument({ source: filePath, filename: 'users.txt' });
     fs.unlinkSync(filePath);
@@ -368,11 +382,13 @@ function setupBotLogic(bot: Telegraf) {
     ctx.reply('Пришлите сообщение для рассылки (текст).');
     bot.on('text', async (bCtx, next) => {
       if (bCtx.from.id !== ADMIN_ID) return next();
-      const users = loadUsers();
+      if (!db) return bCtx.reply("База данных недоступна");
+      
+      const snap = await getDocs(collection(db, 'bot_users'));
       let sent = 0;
-      for (const uid of Object.keys(users)) {
+      for (const d of snap.docs) {
         try {
-          await bCtx.telegram.sendMessage(uid, bCtx.message.text);
+          await bCtx.telegram.sendMessage(Number(d.id), bCtx.message.text);
           sent++;
         } catch (e) {}
       }
@@ -385,8 +401,7 @@ function setupBotLogic(bot: Telegraf) {
     if (text.startsWith('/')) return;
 
     try {
-      const users = loadUsers();
-      const user = users[ctx.from!.id] || { voice: 'Kore', scenario: undefined } as Partial<UserData>;
+      const user = await loadUser(ctx.from!.id);
       
       if (!checkUserQuota(user) && ctx.from!.id !== ADMIN_ID) {
           return ctx.reply('⚠️ Вы исчерпали бесплатный лимит на сегодня (10/10). Лимит обновится завтра. Вы можете купить дополнительные генерации за Telegram Звезды ⭐️, нажав кнопку "Купить генерации" в меню.');
@@ -514,9 +529,10 @@ function setupBotLogic(bot: Telegraf) {
         
         const finalWav = Buffer.concat([wavHeader, pcmBuffer]);
         
-        consumeUserQuota(user, ctx.from!.id);
+        await consumeUserQuota(user, ctx.from!.id);
         
-        saveUser({ 
+        await saveUser({ 
+           ...user,
            id: ctx.from!.id, 
            charsGenerated: (user.charsGenerated || 0) + text.length,
            audioCount: (user.audioCount || 0) + 1
