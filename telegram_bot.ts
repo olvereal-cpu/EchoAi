@@ -8,23 +8,20 @@ dotenv.config();
 
 // --- Configuration ---
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const GEMINI_KEY = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 const ADMIN_ID = Number(process.env.ADMIN_ID);
 const REQ_CHANNEL_ID = process.env.REQUIRED_CHANNEL_ID;
 const CHANNEL_LINK = process.env.CHANNEL_LINK || 'https://t.me/ais_build';
 
 let bot: Telegraf | null = null;
-let ai: GoogleGenAI | null = null;
 
-if (!BOT_TOKEN || !GEMINI_KEY) {
-  console.warn('⚠️ Warning: Missing TELEGRAM_BOT_TOKEN or GEMINI_API_KEY. Telegram bot is disabled.');
+if (!BOT_TOKEN) {
+  console.warn('⚠️ Warning: Missing TELEGRAM_BOT_TOKEN. Telegram bot is disabled.');
 } else {
   bot = new Telegraf(BOT_TOKEN);
-  ai = new GoogleGenAI({ apiKey: GEMINI_KEY });
-  setupBotLogic(bot, ai);
+  setupBotLogic(bot);
 }
 
-function setupBotLogic(bot: Telegraf, ai: GoogleGenAI) {
+function setupBotLogic(bot: Telegraf) {
   const USERS_FILE = path.join(process.cwd(), 'users.json');
 
   // --- Types ---
