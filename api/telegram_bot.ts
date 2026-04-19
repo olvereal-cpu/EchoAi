@@ -67,7 +67,8 @@ function setupBotLogic(bot: Telegraf) {
   const getMainMenu = () => {
     return Markup.keyboard([
       ['🎙️ Выбрать голос', '🎭 Эмоции / Роли'],
-      ['🌍 Переводчик', 'ℹ️ Помощь']
+      ['🌍 Переводчик', '⭐️ Поддержать проект'],
+      ['ℹ️ Помощь']
     ]).resize();
   };
 
@@ -286,7 +287,7 @@ function setupBotLogic(bot: Telegraf) {
           try {
              let prepPrompt = `Translate the following text into ${langNames[user.targetLang]}. ONLY output the translated text, without any conversational filler or markdown formatting.\n\nText: ${text}`;
              const textResp = await currentAi.models.generateContent({
-                 model: "gemini-3.1-flash-preview",
+                 model: "gemini-3-flash-preview",
                  contents: prepPrompt
              });
              if (textResp.text) {
