@@ -1,5 +1,5 @@
 import { Telegraf, Context, Markup } from 'telegraf';
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -614,9 +614,15 @@ function setupBotLogic(bot: Telegraf) {
               const currentAi = new GoogleGenAI({ apiKey: currentKey });
               response = await currentAi.models.generateContent({ 
                 model: "gemini-3.1-flash-tts-preview",
-                contents: [{ role: 'user', parts: [{ text: finalTTSPrompt }] }],
+                contents: [{ parts: [{ text: finalTTSPrompt }] }],
                 config: {
-                  responseModalities: ["AUDIO" as any],
+                  responseModalities: [Modality.AUDIO],
+                  safetySettings: [
+                    { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'BLOCK_NONE' as any },
+                    { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'BLOCK_NONE' as any },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'BLOCK_NONE' as any }
+                  ],
                   speechConfig: {
                     voiceConfig: {
                       prebuiltVoiceConfig: { voiceName: user.voice || 'Kore' },
@@ -624,6 +630,13 @@ function setupBotLogic(bot: Telegraf) {
                   },
                 },
               });
+              
+              const candidate = response.candidates?.[0];
+              if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'OTHER') {
+                  console.warn(`⚠️ Blocked by safety or other reason: ${candidate.finishReason}`);
+                  continue; 
+              }
+
               success = true;
               break;
           } catch (apiErr: any) {
