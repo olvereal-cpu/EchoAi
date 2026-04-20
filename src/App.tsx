@@ -20,6 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { getAi } from './lib/gemini';
+import { Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 
 // Constants
 const VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'] as const;
@@ -330,7 +331,15 @@ export default function App() {
         model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: prompt }] }],
         config: {
-          responseModalities: ["AUDIO"],
+          systemInstruction: "You are a professional text-to-speech engine. Convert the provided text into audio using the specified voice. Do not output any text response.",
+          responseModalities: [Modality.AUDIO],
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'BLOCK_NONE' as any },
+            { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'BLOCK_NONE' as any },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'BLOCK_NONE' as any },
+            { category: 'HARM_CATEGORY_CIVIC_INTEGRITY' as any, threshold: 'BLOCK_NONE' as any }
+          ],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: selectedVoice },
@@ -339,7 +348,12 @@ export default function App() {
         },
       });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const candidate = response.candidates?.[0];
+      if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'OTHER') {
+        throw new Error(`Generation blocked by model safety filters (${candidate.finishReason}). Try a different text.`);
+      }
+
+      const base64Audio = candidate?.content?.parts?.[0]?.inlineData?.data;
       
       if (base64Audio) {
         setLastAudioData(base64Audio);
