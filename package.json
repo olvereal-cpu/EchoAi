@@ -1,5 +1,6 @@
 {
   "name": "react-example",
+  "description": "EchoVox Telegram Bot with Vercel Cron Warmup soporte",
   "private": true,
   "version": "0.0.0",
   "type": "module",
