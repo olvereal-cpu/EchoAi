@@ -18,6 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { cn } from './lib/utils';
 import { getAi } from './lib/gemini';
 
@@ -830,6 +831,7 @@ export default function App() {
           <a href="#" className="text-[10px] uppercase tracking-[0.15em] font-bold opacity-30 hover:opacity-100 transition-opacity">Docs</a>
         </nav>
       </footer>
+      <SpeedInsights />
     </div>
   );
 }
