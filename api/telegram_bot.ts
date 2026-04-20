@@ -750,6 +750,19 @@ console.log(`🤖 Bot Startup Check: ENV=${process.env.NODE_ENV}, VERCEL=${proce
 if (!isVercel && !isWebhook) {
   console.log('🔌 Triggering getBot() for local polling...');
   getBot();
+  
+  // Local Pingator to prevent local sleep
+  setInterval(async () => {
+    try {
+      const b = getBot();
+      if (b) {
+        const me = await b.telegram.getMe();
+        console.log(`📡 Local Ping: ${me.username} is active.`);
+      }
+    } catch (e: any) {
+      console.warn('📡 Local Ping Failed:', e.message);
+    }
+  }, 1000 * 60 * 10); // Every 10 minutes
 }
 
 export { getBot as getTelegrafBot };
@@ -774,15 +787,31 @@ export default async (req: any, res: any) => {
       res.status(500).send('Internal processing error');
     }
   } else {
-    // Health check
+    // Health check / Pingator
+    const isCron = req.headers['x-vercel-cron'] === '1';
+    
     try {
+      // Access Firestore to keep it warm
+      const { collection, getDocs, limit, query } = await import("firebase/firestore/lite");
+      if (db) {
+        await getDocs(query(collection(db, "bot_users"), limit(1)));
+      }
+
       const info = await currentBot.telegram.getMe();
+      
+      if (isCron) {
+        console.log('⏰ Vercel Cron Ping: System Warmed Up.');
+      }
+
       res.status(200).json({
          status: 'ready',
          bot: info.username,
+         warmed: true,
+         cron: isCron,
          webhook: process.env.WEBHOOK_MODE === 'true'
       });
     } catch (e: any) {
+      console.error('🌡️ Warmup Error:', e.message);
       res.status(200).json({ status: 'running', error: e.message });
     }
   }
