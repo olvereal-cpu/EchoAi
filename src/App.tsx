@@ -194,6 +194,7 @@ function generateWav(base64Data: string): Blob {
 
 export default function App() {
   const [text, setText] = useState('');
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<VoiceName>('Kore');
   const [isGenerating, setIsGenerating] = useState(false);
   const [history, setHistory] = useState<TtsHistory[]>([]);
@@ -313,8 +314,8 @@ export default function App() {
     setError(null);
     
     try {
-      // Find if this is a scenario to apply a specific style instruction
-      const activeScenario = SCENARIOS.find(s => s.text === text.trim());
+      // Use the selected scenario ID to apply the specific style instruction
+      const activeScenario = SCENARIOS.find(s => s.id === selectedScenarioId);
       const prompt = activeScenario ? `${activeScenario.style}: ${text.trim()}` : text.trim();
 
       // Detection for dialogue format: "Name: text"
@@ -625,10 +626,17 @@ export default function App() {
               {SCENARIOS.map((scenario) => (
                 <button
                   key={scenario.id}
-                  onClick={() => setText(scenario.text)}
+                  onClick={() => {
+                    if (selectedScenarioId === scenario.id) {
+                      setSelectedScenarioId(null);
+                    } else {
+                      setText(scenario.text);
+                      setSelectedScenarioId(scenario.id);
+                    }
+                  }}
                   className={cn(
                     "px-4 py-2 border border-[#f0f0f01a] text-[11px] uppercase tracking-wider transition-all hover:bg-white/5",
-                    text === scenario.text ? "border-[#ff4e00] text-[#ff4e00] bg-[#ff4e000d]" : "text-white/60"
+                    selectedScenarioId === scenario.id ? "border-[#ff4e00] text-[#ff4e00] bg-[#ff4e000d]" : "text-white/60"
                   )}
                 >
                   <span className="mr-2">{scenario.emoji}</span>
