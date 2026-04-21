@@ -16,7 +16,7 @@ const CHANNEL_LINK = process.env.CHANNEL_LINK || 'https://t.me/ais_build';
 let bot: Telegraf | null = null;
 let botInitialized = false;
 
-function getBot() {
+export function getTelegrafBot() {
   if (botInitialized && bot) return bot;
   
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -314,7 +314,7 @@ function setupBotLogic(bot: Telegraf) {
     try {
       const info = await ctx.telegram.getWebhookInfo();
       const text = `ℹ️ **Webhook Info:**\n\n` +
-                   `🔗 URL: ${info.url || 'Не установлен'}\n` +
+                   `🔗 URL: ${info.url || 'Не установлен (Проверьте PROJECT_URL в настройках Vercel)'}\n` +
                    `📅 Has Custom Cert: ${info.has_custom_certificate}\n` +
                    `📊 Pending Updates: ${info.pending_update_count}\n` +
                    `❌ Last Error: ${info.last_error_message || 'Нет'}\n` +
@@ -739,9 +739,9 @@ function setupBotLogic(bot: Telegraf) {
   // Only start polling if NOT on Vercel and explicitly allowed
   const isVercel = process.env.VERCEL === '1';
   const isWebhook = process.env.WEBHOOK_MODE === 'true';
-  const allowPolling = process.env.ALLOW_POLLING === 'true';
+  const allowPolling = !isVercel && process.env.ALLOW_POLLING === 'true';
 
-  if (!isVercel && !isWebhook && allowPolling) {
+  if (allowPolling && !isWebhook) {
      console.log('🚀 Launching polling bot...');
      bot.launch()
        .then(() => console.log('✅ Polling Bot successfully started.'))
@@ -760,18 +760,18 @@ function setupBotLogic(bot: Telegraf) {
 const isProd = process.env.NODE_ENV === 'production';
 const isVercel = process.env.VERCEL === '1';
 const isWebhook = process.env.WEBHOOK_MODE === 'true';
-const allowPolling = process.env.ALLOW_POLLING === 'true';
+const allowPolling = !isVercel && process.env.ALLOW_POLLING === 'true';
 
 console.log(`🤖 Bot Startup Check: ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}, WEBHOOK=${process.env.WEBHOOK_MODE}, ALLOW_POLLING=${allowPolling}`);
 
-if (!isVercel && !isWebhook && allowPolling) {
-  console.log('🔌 Triggering getBot() for local polling...');
-  getBot();
+if (allowPolling) {
+  console.log('🔌 Triggering getTelegrafBot() for local polling...');
+  getTelegrafBot();
   
   // Local Pingator to prevent local sleep
   setInterval(async () => {
     try {
-      const b = getBot();
+      const b = getTelegrafBot();
       if (b) {
         const me = await b.telegram.getMe();
         console.log(`📡 Local Ping: ${me.username} is active.`);
@@ -782,13 +782,11 @@ if (!isVercel && !isWebhook && allowPolling) {
   }, 1000 * 60 * 10); // Every 10 minutes
 }
 
-export { getBot as getTelegrafBot };
-
 // Vercel Serverless Function Handler
 export default async (req: any, res: any) => {
   console.log(`📡 Incoming Update [${req.method}]`);
   
-  const currentBot = getBot();
+  const currentBot = getTelegrafBot();
   
   if (!currentBot) {
     console.error('❌ Bot not initialized: TOKEN is missing.');
