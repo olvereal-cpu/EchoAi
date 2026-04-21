@@ -616,6 +616,7 @@ function setupBotLogic(bot: Telegraf) {
                 model: "gemini-3.1-flash-tts-preview",
                 contents: [{ parts: [{ text: finalTTSPrompt }] }],
                 config: {
+                  systemInstruction: "You are a professional text-to-speech engine. Convert the provided text into audio using the specified voice. Maintain a constant volume level, energy, and clear articulation throughout the entire duration of the speech. Do not fade out, lower the volume, or change the pace towards the end. Do not output any text response.",
                   responseModalities: [Modality.AUDIO],
                   safetySettings: [
                     { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
@@ -738,8 +739,9 @@ function setupBotLogic(bot: Telegraf) {
   // Only start polling if NOT on Vercel and explicitly allowed
   const isVercel = process.env.VERCEL === '1';
   const isWebhook = process.env.WEBHOOK_MODE === 'true';
+  const allowPolling = process.env.ALLOW_POLLING === 'true';
 
-  if (!isVercel && !isWebhook) {
+  if (!isVercel && !isWebhook && allowPolling) {
      console.log('🚀 Launching polling bot...');
      bot.launch()
        .then(() => console.log('✅ Polling Bot successfully started.'))
@@ -758,10 +760,11 @@ function setupBotLogic(bot: Telegraf) {
 const isProd = process.env.NODE_ENV === 'production';
 const isVercel = process.env.VERCEL === '1';
 const isWebhook = process.env.WEBHOOK_MODE === 'true';
+const allowPolling = process.env.ALLOW_POLLING === 'true';
 
-console.log(`🤖 Bot Startup Check: ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}, WEBHOOK=${process.env.WEBHOOK_MODE}`);
+console.log(`🤖 Bot Startup Check: ENV=${process.env.NODE_ENV}, VERCEL=${process.env.VERCEL}, WEBHOOK=${process.env.WEBHOOK_MODE}, ALLOW_POLLING=${allowPolling}`);
 
-if (!isVercel && !isWebhook) {
+if (!isVercel && !isWebhook && allowPolling) {
   console.log('🔌 Triggering getBot() for local polling...');
   getBot();
   

@@ -332,7 +332,7 @@ export default function App() {
         model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: prompt }] }],
         config: {
-          systemInstruction: "You are a professional text-to-speech engine. Convert the provided text into audio using the specified voice. Do not output any text response.",
+          systemInstruction: "You are a professional text-to-speech engine. Convert the provided text into audio using the specified voice. Maintain a constant volume level, energy, and clear articulation throughout the entire duration of the speech. Do not fade out, lower the volume, or change the pace towards the end. Do not output any text response.",
           responseModalities: [Modality.AUDIO],
           safetySettings: [
             { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'BLOCK_NONE' as any },
