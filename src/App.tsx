@@ -418,11 +418,34 @@ export default function App() {
   const deleteWebhook = async () => {
     if (!confirm("Are you sure you want to delete the webhook? This will stop Vercel and enable local polling.")) return;
     try {
-      await fetch('/api/admin/webhook/delete', { method: 'POST' });
+      await fetch('/api/admin/webhook', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete' })
+      });
       alert("Webhook deleted. Refreshing...");
       fetchAdminData();
     } catch (e) {
       alert("Failed to delete webhook");
+    }
+  };
+
+  const setWebhook = async () => {
+    try {
+      const res = await fetch('/api/admin/webhook', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ Webhook established successfully!");
+      } else {
+        alert("❌ Error: " + (data.error || 'Failed to set webhook'));
+      }
+      fetchAdminData();
+    } catch (e) {
+      alert("Failed to establish webhook relay.");
     }
   };
 
@@ -484,20 +507,26 @@ export default function App() {
                  </div>
                </div>
                
-               <div className="pt-4 flex gap-4">
-                 <button 
-                  onClick={fetchAdminData}
-                  className="px-4 py-2 bg-white/5 border border-white/10 text-[10px] font-bold uppercase hover:bg-white/10"
-                 >
-                   Refresh Sync
-                 </button>
-                 <button 
-                  onClick={deleteWebhook}
-                  className="px-4 py-2 border border-red-500/50 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white"
-                 >
-                   Clear Webhook Relay
-                 </button>
-               </div>
+                <div className="pt-4 flex gap-4">
+                  <button 
+                   onClick={fetchAdminData}
+                   className="px-4 py-2 bg-white/5 border border-white/10 text-[10px] font-bold uppercase hover:bg-white/10"
+                  >
+                    Refresh Sync
+                  </button>
+                  <button 
+                   onClick={setWebhook}
+                   className="px-4 py-2 bg-[#ff4e00]/20 border border-[#ff4e00]/40 text-[#ff4e00] text-[10px] font-bold uppercase hover:bg-[#ff4e00] hover:text-white"
+                  >
+                    Establish Webhook Relay
+                  </button>
+                  <button 
+                   onClick={deleteWebhook}
+                   className="p-2 border border-red-500/30 text-red-500/50 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white"
+                  >
+                    Reset
+                  </button>
+                </div>
             </div>
           </div>
 

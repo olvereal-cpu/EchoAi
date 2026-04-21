@@ -9,6 +9,18 @@
     {
       "source": "/api/telegram_bot",
       "destination": "/api/telegram_bot.ts"
+    },
+    {
+      "source": "/api/admin/stats",
+      "destination": "/api/admin_stats.ts"
+    },
+    {
+      "source": "/api/admin/webhook",
+      "destination": "/api/admin_webhook.ts"
+    },
+    {
+      "source": "/api/admin/webhook/delete",
+      "destination": "/api/admin_webhook.ts"
     }
   ]
 }
